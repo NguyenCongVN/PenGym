@@ -36,49 +36,65 @@ ACTION_NAMES = {SUBNET_SCAN: "subnet_scan", OS_SCAN: "os_scan", SERVICE_SCAN: "s
                 EXPLOIT_SSH: "e_ssh",  EXPLOIT_FTP: "e_ftp", EXPLOIT_SAMBA: "e_samba", EXPLOIT_SMTP: "e_smtp", EXPLOIT_HTTP: "e_http", 
                 PRIVI_ESCA_TOMCAT: "pe_tomcat", PRIVI_ESCA_PROFTPD: "pe_daclsvc", PRIVI_ESCA_CRON: "pe_schtask"}
 
+# HOST1_0 = 'host1-0'
+# HOST1_1 = 'host1-1'
+# HOST1_2 = 'host1-2'
+# HOST1_3 = 'host1-3'
+# HOST1_4 = 'host1-4'
+# HOST1_5 = 'host1-5'
+# HOST1_6 = 'host1-6'
+# HOST1_7 = 'host1-7'
+# HOST1_8 = 'host1-8'
+# HOST1_9 = 'host1-9'
+# HOST1_10 = 'host1-10'
+# HOST1_11 = 'host1-11'
+# HOST1_12 = 'host1-12'
+# HOST1_13 = 'host1-13'
+# HOST1_14 = 'host1-14'
+# HOST1_15 = 'host1-15'
+# HOST2_0 = 'host2-0'
+# HOST2_1 = 'host2-1'
+# HOST3_0 = 'host3-0'
+# HOST3_1 = 'host3-1'
+# HOST3_2 = 'host3-2'
+# HOST3_3 = 'host3-3'
+# HOST3_4 = 'host3-4'
+# HOST3_5 = 'host3-5'
+# HOST4_0 = 'host4-0'
+# HOST4_1 = 'host4-1'
+# HOST4_2 = 'host4-2'
+# HOST4_3 = 'host4-3'
+# HOST4_4 = 'host4-4'
+# HOST5_0 = 'host5-0'
+# HOST5_1 = 'host5-1'
+# HOST5_2 = 'host5-2'
+# HOST5_3 = 'host5-3'
+# HOST6_0 = 'host6-0'
+# HOST6_1 = 'host6-1'
+
+# ACTION_TARGETS = {HOST1_0: (1, 0), HOST1_1: (1, 1), HOST1_2: (1, 2), HOST1_3: (1, 3), HOST1_4: (1, 4), HOST1_5: (1, 5), HOST1_6: (1, 6), HOST1_7: (1, 7), 
+#                   HOST1_8: (1, 8), HOST1_9: (1, 9), HOST1_10: (1, 10), HOST1_11: (1, 11), HOST1_12: (1, 12), HOST1_13: (1, 13), HOST1_14: (1, 14), HOST1_15: (1, 15),
+#                   HOST2_0: (2, 0), HOST2_1: (2, 1), 
+#                   HOST3_0: (3, 0), HOST3_1: (3, 1), HOST3_2: (3, 3), HOST3_3: (3, 3), HOST3_4: (3, 4), HOST3_5: (3, 5), 
+#                   HOST4_0: (4, 0), HOST4_1: (4, 1),
+#                   HOST5_0: (5, 0), HOST5_1: (5, 1),
+#                   HOST6_0: (6, 0), HOST6_1: (6, 1)}
+
+
 HOST1_0 = 'host1-0'
-HOST1_1 = 'host1-1'
-HOST1_2 = 'host1-2'
-HOST1_3 = 'host1-3'
-HOST1_4 = 'host1-4'
-HOST1_5 = 'host1-5'
-HOST1_6 = 'host1-6'
-HOST1_7 = 'host1-7'
-HOST1_8 = 'host1-8'
-HOST1_9 = 'host1-9'
-HOST1_10 = 'host1-10'
-HOST1_11 = 'host1-11'
-HOST1_12 = 'host1-12'
-HOST1_13 = 'host1-13'
-HOST1_14 = 'host1-14'
-HOST1_15 = 'host1-15'
 HOST2_0 = 'host2-0'
-HOST2_1 = 'host2-1'
 HOST3_0 = 'host3-0'
 HOST3_1 = 'host3-1'
-HOST3_2 = 'host3-2'
-HOST3_3 = 'host3-3'
-HOST3_4 = 'host3-4'
-HOST3_5 = 'host3-5'
 HOST4_0 = 'host4-0'
-HOST4_1 = 'host4-1'
-HOST4_2 = 'host4-2'
-HOST4_3 = 'host4-3'
-HOST4_4 = 'host4-4'
-HOST5_0 = 'host5-0'
-HOST5_1 = 'host5-1'
-HOST5_2 = 'host5-2'
-HOST5_3 = 'host5-3'
-HOST6_0 = 'host6-0'
-HOST6_1 = 'host6-1'
 
-ACTION_TARGETS = {HOST1_0: (1, 0), HOST1_1: (1, 1), HOST1_2: (1, 2), HOST1_3: (1, 3), HOST1_4: (1, 4), HOST1_5: (1, 5), HOST1_6: (1, 6), HOST1_7: (1, 7), 
-                  HOST1_8: (1, 8), HOST1_9: (1, 9), HOST1_10: (1, 10), HOST1_11: (1, 11), HOST1_12: (1, 12), HOST1_13: (1, 13), HOST1_14: (1, 14), HOST1_15: (1, 15),
-                  HOST2_0: (2, 0), HOST2_1: (2, 1), 
-                  HOST3_0: (3, 0), HOST3_1: (3, 1), HOST3_2: (3, 3), HOST3_3: (3, 3), HOST3_4: (3, 4), HOST3_5: (3, 5), 
-                  HOST4_0: (4, 0), HOST4_1: (4, 1),
-                  HOST5_0: (5, 0), HOST5_1: (5, 1),
-                  HOST6_0: (6, 0), HOST6_1: (6, 1)}
+ACTION_TARGETS = {
+    HOST1_0: (1, 0),  # First subnet, single host
+    HOST2_0: (2, 0),  # Second subnet, single host
+    HOST3_0: (3, 0),  # Third subnet, first host
+    HOST3_1: (3, 1),  # Third subnet, second host
+    HOST4_0: (4, 0)   # Fourth subnet, single host
+}
+
 
 # Agent types
 AGENT_TYPE_RANDOM = "random"
@@ -270,7 +286,7 @@ def main(args):
     utils.init_config_info(config_path)
 
     # Create an experiment environment using scenario path
-    scenario_path = utils.replace_file_path(utils.config_info, storyboard.SCENARIO_FILE)
+    scenario_path = utils.replace_file_path(utils.config_info, storyboard.SCENARIO_FILE) # Problem
     print(f"* Create environment using custom scenario from '{scenario_path}'...")
     env = create_pengym_custom_environment(scenario_path)
 

@@ -3,7 +3,7 @@
 # Global configuration values in PenGym
 #########################################
 
-pengym_source: home/cyuser/public/PenGym
+pengym_source: /home/ntcong/dev/PenGym
 
 # Should be the same as path in CyRIS CONFIG
 cyber_range_dir: home/cyuser/public/cyris/cyber_range
@@ -13,7 +13,7 @@ host_virbr_addr: 192.168.122.1
 host_account: cyuser
 guest_basevm_config_file: /home/cyuser/images/ubuntubase.xml
 
-scenario_name: medium-multi-site
+scenario_name: tiny-small
 
 range_id: 44
 
