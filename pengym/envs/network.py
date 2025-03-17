@@ -150,29 +150,37 @@ class PenGymNetwork(Network):
 
         return next_state, result
 
-    # Override function in NASim
-    def traffic_permitted(self, state, host_addr, service):
-        """Checks whether the subnet and host firewalls permits traffic to a
-        given host using this service, based on current set of compromised hosts on
-        network.
+    # # Override function in NASim
+    # def traffic_permitted(self, state, host_addr, service):
+    #     """Checks whether the subnet and host firewalls permits traffic to a
+    #     given host using this service, based on current set of compromised hosts on
+    #     network.
         
-        Args:
-            state (State): the current state of environment
-            host_addr (tuple): host address
-            service (str): service name
+    #     Args:
+    #         state (State): the current state of environment
+    #         host_addr (tuple): host address
+    #         service (str): service name
+    #     """
+    #     for src_addr in self.address_space:
+    #         src_compromised = state.host_compromised(src_addr)
+    #         if not state.host_compromised(src_addr) and \
+    #            not self.subnet_public(src_addr[0]):
+    #             continue
+    #         if not self.subnet_traffic_permitted(
+    #                 src_addr[0], host_addr[0], service, src_compromised
+    #         ):
+    #             continue
+    #         if self.host_traffic_permitted(src_addr, host_addr, service):
+    #             return True
+    #     return False
+    
+    def traffic_permitted(self, state, host_addr, service):
+        """Checks whether traffic is permitted based on iptables rules
         """
-        for src_addr in self.address_space:
-            src_compromised = state.host_compromised(src_addr)
-            if not state.host_compromised(src_addr) and \
-               not self.subnet_public(src_addr[0]):
-                continue
-            if not self.subnet_traffic_permitted(
-                    src_addr[0], host_addr[0], service, src_compromised
-            ):
-                continue
-            if self.host_traffic_permitted(src_addr, host_addr, service):
-                return True
-        return False
+        # Trong môi trường NAT với iptables, các quy tắc đã được cấu hình
+        # nên chúng ta chỉ cần kiểm tra liệu luồng lưu lượng có được cho phép 
+        # dựa trên mô hình scenario
+        return self.subnet_traffic_permitted(host_addr[0], self._target[0], service, True)
     
     # Revise for issue in NASim (since with current version of python, nasim is updated an can not modify)
     def subnet_traffic_permitted(self, src_subnet, dest_subnet, service, src_compromised=True):

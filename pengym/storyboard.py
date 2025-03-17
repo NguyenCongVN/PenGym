@@ -23,6 +23,7 @@ class Storyboard():
 
     # Constant values for msfrpc client
     MSFRPC_CONFIG = 'msfrpc_config'
+    MSFRPC_HOST = 'msfrpc_host'
     MSFRPC_CLINET_PWD = 'msfrpc_client_pwd'
     MSFRPC_PORT = 'port'
     SSL = 'ssl'

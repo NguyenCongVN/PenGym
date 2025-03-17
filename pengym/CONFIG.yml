@@ -5,13 +5,10 @@
 
 pengym_source: /home/ntcong/dev/PenGym
 
-# Should be the same as path in CyRIS CONFIG
-cyber_range_dir: home/cyuser/public/cyris/cyber_range
-
-host_mgmt_addr: 172.16.1.4
-host_virbr_addr: 192.168.122.1
-host_account: cyuser
-guest_basevm_config_file: /home/cyuser/images/ubuntubase.xml
+# host_mgmt_addr: 172.16.1.4
+# host_virbr_addr: 192.168.122.1
+# host_account: cyuser
+# guest_basevm_config_file: /home/cyuser/images/ubuntubase.xml
 
 scenario_name: tiny-small
 
@@ -19,9 +16,10 @@ range_id: 44
 
 # Configuration of the MSF RPC service
 msfrpc_config:
-  msfrpc_client_pwd: my_password
+  msfrpc_host: 44.1.0.10
+  msfrpc_client_pwd: cyuser
   port: 55553
-  ssl: True
+  ssl: Falses
 
 # Mapping of service names to port numbers
 service_port:
@@ -40,7 +38,6 @@ file_path:
 # General information
   scenario_file: /{pengym_source}/database/scenarios/{scenario_name}.yml
   cyris_description_file: /{pengym_source}/cyber_range/{scenario_name}
-  range_details_file: /{cyber_range_dir}/{range_id}/range_details-cr{range_id}.yml
 
   # Task
   ## add_account

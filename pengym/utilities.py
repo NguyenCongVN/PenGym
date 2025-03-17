@@ -82,15 +82,21 @@ def init_config_info(config_path):
 def init_msfrpc_client():
     """Initialize the Metasploit client
     """
-    my_password = config_info[storyboard.MSFRPC_CONFIG][storyboard.MSFRPC_CLINET_PWD] 
+    my_password = config_info[storyboard.MSFRPC_CONFIG][storyboard.MSFRPC_CLINET_PWD]
+    
+    # Thêm đoạn code này để lấy giá trị host, mặc định là 127.0.0.1
+    host = "127.0.0.1"
+    if storyboard.MSFRPC_HOST in config_info[storyboard.MSFRPC_CONFIG]:
+        host = config_info[storyboard.MSFRPC_CONFIG][storyboard.MSFRPC_HOST]
+    
     port = config_info[storyboard.MSFRPC_CONFIG][storyboard.MSFRPC_PORT] 
     ssl = config_info[storyboard.MSFRPC_CONFIG][storyboard.SSL]
 
     try:
         global msfrpc_client
-        msfrpc_client = MsfRpcClient(my_password, port=port, ssl=ssl)
+        msfrpc_client = MsfRpcClient(my_password, server=host, port=port, ssl=ssl)
     except Exception as e:
-        print(f"* ERROR: Failed to connect to MSF RPC client: {e}", file=sys.stderr)
+        print(f"* ERROR: Failed to connect to MSF RPC client at {host}:{port}: {e}", file=sys.stderr)
         sys.exit(2)
 
 def cleanup_msfrpc_client():
@@ -248,52 +254,171 @@ def create_bridge_map(range_details_file, instance_index):
         bridge_map: bridge_map dictionary
     """
     
-    yaml_dict = load_yaml_file(range_details_file)
+    # yaml_dict = load_yaml_file(range_details_file)
     
-    bridge_map = dict()
-    brige_info = list
-    bridge_info = None
+    # bridge_map = dict()
+    # brige_info = list
+    # bridge_info = None
     
-    # Get the instance of the cyber range
-    for instance in yaml_dict[storyboard.HOSTS][0][storyboard.INSTANCES]:
-        if instance[storyboard.INSTANCE_INDEX] == instance_index:
-            guest_list = instance[storyboard.GUESTS]
-            break
+    # # Get the instance of the cyber range
+    # for instance in yaml_dict[storyboard.HOSTS][0][storyboard.INSTANCES]:
+    #     if instance[storyboard.INSTANCE_INDEX] == instance_index:
+    #         guest_list = instance[storyboard.GUESTS]
+    #         break
     
-    for guest in guest_list:
+    # for guest in guest_list:
         
-        ip_address = guest[storyboard.IP_ADDRESSES]
-        networks = dict(guest[storyboard.NETWORKS])
+    #     ip_address = guest[storyboard.IP_ADDRESSES]
+    #     networks = dict(guest[storyboard.NETWORKS])
         
-        # Map bridge name to corresponding network link
-        for key, link in networks.items():
-            if link not in bridge_map:
-                if bridge_info is None:
-                    bridge_idx = '-'.join(ip_address[key].split('.')[:-1])
-                    bridge_name = f"br{bridge_idx}"
-                else:
-                    bridge_name = bridge_info[link]
-                bridge_ip = ip_address[key][:-1] + "1"
-                brige_info = [bridge_name, bridge_ip, False]
-                bridge_map[link] = brige_info
+    #     # Map bridge name to corresponding network link
+    #     for key, link in networks.items():
+    #         if link not in bridge_map:
+    #             if bridge_info is None:
+    #                 bridge_idx = '-'.join(ip_address[key].split('.')[:-1])
+    #                 bridge_name = f"br{bridge_idx}"
+    #             else:
+    #                 bridge_name = bridge_info[link]
+    #             bridge_ip = ip_address[key][:-1] + "1"
+    #             brige_info = [bridge_name, bridge_ip, False]
+    #             bridge_map[link] = brige_info
     
+    # Bỏ qua tham số range_details_file và tạo bridge_map cố định
+    bridge_map = {
+        'link01': ['virbr1', '192.168.100.1', False],  # Internet đến Subnet 1
+        'link12': ['virbr2', '172.18.1.1', False],     # Subnet 1 đến Subnet 2
+        'link23': ['virbr3', '10.0.0.1', False],       # Subnet 2 đến Subnet 3
+        'link34': ['virbr4', '10.0.1.1', False]        # Subnet 3 đến Subnet 4
+    }
     return bridge_map
 
-def init_host_map(range_details_file, instance_index = 1):
-    """Initialize the host map global variable
+# def init_host_map(range_details_file, instance_index = 1):
+#     """Initialize the host map global variable
 
-    Args:
-        range_details_file (str): path of cyber range detail 
-        information yaml file after creating by CyRIS
+#     Args:
+#         range_details_file (str): path of cyber range detail 
+#         information yaml file after creating by CyRIS
         
-        instance_index (int, optional): instance number of network in clone setting 
-        that compatible with CyRIS scenario (Default = 1)
+#         instance_index (int, optional): instance number of network in clone setting 
+#         that compatible with CyRIS scenario (Default = 1)
+#     """
+#     try:
+#         global host_map
+#         host_map = create_host_map(range_details_file, instance_index)
+#     except Exception as e:
+#         print(f"* WARNING: Failed to create host map: {e}", file=sys.stderr)
+
+def init_host_map():
+    """Khởi tạo thủ công host_map cho môi trường có sẵn
+    
+    Args:
+        range_details_file: Không sử dụng, giữ để tương thích API
+        instance_index: Không sử dụng, giữ để tương thích API
     """
-    try:
-        global host_map
-        host_map = create_host_map(range_details_file, instance_index)
-    except Exception as e:
-        print(f"* WARNING: Failed to create host map: {e}", file=sys.stderr)
+    global host_map
+    host_map = {}
+    
+    # Tạo cấu trúc cho host tại (1, 0) - Subnet 1, Host 0
+    host_map[(1, 0)] = {
+        storyboard.HOST_IP: ["192.168.100.10"],             # IP của host
+        storyboard.SUBNET_IP: "192.168.100.0/24",           # Subnet
+        storyboard.KVM_DOMAIN: "cr44-host1-0",              # Tên domain trong KVM
+        storyboard.BRIDGE_UP: False,                        # Trạng thái bridge
+        storyboard.SHELL: None,                             # Shell object
+        storyboard.OS: None,                                # OS value
+        storyboard.SERVICES: None,                          # Services
+        storyboard.PROCESSES: None,                         # Processes
+        storyboard.SUBNET: None,                            # Subnet
+        storyboard.PE_SHELL: dict(),                        # Root shell objects
+        storyboard.EXPLOIT_ACCESS: dict(),                  # Exploit access values
+        storyboard.ACCESS: 0.0,                             # Access level
+        storyboard.DEFAULT_GW: None,                        # Default gateway status
+        storyboard.SERVICE_SCAN_STATE: True,                # Service scan state
+        storyboard.OS_SCAN_STATE: True,                     # OS scan state
+        storyboard.SERVICE_EXPLOIT_STATE: True              # Service exploit state
+    }
+    
+    # Tạo cấu trúc cho host tại (2, 0) - Subnet 2, Host 0
+    host_map[(2, 0)] = {
+        storyboard.HOST_IP: ["172.18.1.10"],
+        storyboard.SUBNET_IP: "172.18.1.0/24",
+        storyboard.KVM_DOMAIN: "cr44-host2-0",
+        storyboard.BRIDGE_UP: False,
+        storyboard.SHELL: None,
+        storyboard.OS: None,
+        storyboard.SERVICES: None,
+        storyboard.PROCESSES: None,
+        storyboard.SUBNET: None,
+        storyboard.PE_SHELL: dict(),
+        storyboard.EXPLOIT_ACCESS: dict(),
+        storyboard.ACCESS: 0.0,
+        storyboard.DEFAULT_GW: None,
+        storyboard.SERVICE_SCAN_STATE: True,
+        storyboard.OS_SCAN_STATE: True,
+        storyboard.SERVICE_EXPLOIT_STATE: True
+    }
+    
+    # Tạo cấu trúc cho host tại (3, 0) - Subnet 3, Host 0
+    host_map[(3, 0)] = {
+        storyboard.HOST_IP: ["10.0.0.10"],
+        storyboard.SUBNET_IP: "10.0.0.0/24",
+        storyboard.KVM_DOMAIN: "cr44-host3-0",
+        storyboard.BRIDGE_UP: False,
+        storyboard.SHELL: None,
+        storyboard.OS: None,
+        storyboard.SERVICES: None,
+        storyboard.PROCESSES: None,
+        storyboard.SUBNET: None,
+        storyboard.PE_SHELL: dict(),
+        storyboard.EXPLOIT_ACCESS: dict(),
+        storyboard.ACCESS: 0.0,
+        storyboard.DEFAULT_GW: None,
+        storyboard.SERVICE_SCAN_STATE: True,
+        storyboard.OS_SCAN_STATE: True,
+        storyboard.SERVICE_EXPLOIT_STATE: True
+    }
+    
+    # Tạo cấu trúc cho host tại (3, 1) - Subnet 3, Host 1
+    host_map[(3, 1)] = {
+        storyboard.HOST_IP: ["10.0.0.60"],
+        storyboard.SUBNET_IP: "10.0.0.0/24",
+        storyboard.KVM_DOMAIN: "cr44-host3-1",
+        storyboard.BRIDGE_UP: False,
+        storyboard.SHELL: None,
+        storyboard.OS: None,
+        storyboard.SERVICES: None,
+        storyboard.PROCESSES: None,
+        storyboard.SUBNET: None,
+        storyboard.PE_SHELL: dict(),
+        storyboard.EXPLOIT_ACCESS: dict(),
+        storyboard.ACCESS: 0.0,
+        storyboard.DEFAULT_GW: None,
+        storyboard.SERVICE_SCAN_STATE: True,
+        storyboard.OS_SCAN_STATE: True,
+        storyboard.SERVICE_EXPLOIT_STATE: True
+    }
+    
+    # Tạo cấu trúc cho host tại (4, 0) - Subnet 4, Host 0
+    host_map[(4, 0)] = {
+        storyboard.HOST_IP: ["10.0.1.10"],
+        storyboard.SUBNET_IP: "10.0.1.0/24",
+        storyboard.KVM_DOMAIN: "cr44-host4-0",
+        storyboard.BRIDGE_UP: False,
+        storyboard.SHELL: None,
+        storyboard.OS: None,
+        storyboard.SERVICES: None,
+        storyboard.PROCESSES: None,
+        storyboard.SUBNET: None,
+        storyboard.PE_SHELL: dict(),
+        storyboard.EXPLOIT_ACCESS: dict(),
+        storyboard.ACCESS: 0.0,
+        storyboard.DEFAULT_GW: None,
+        storyboard.SERVICE_SCAN_STATE: True,
+        storyboard.OS_SCAN_STATE: True,
+        storyboard.SERVICE_EXPLOIT_STATE: True
+    }
+    
+    return host_map
 
 def reset_host_map():
     """Reset the neccessary attribute of host map
@@ -315,37 +440,59 @@ def reset_host_map():
         host_map[address][storyboard.OS_SCAN_STATE] = True
         host_map[address][storyboard.SERVICE_EXPLOIT_STATE] = True
 
-def init_bridge_setup(range_details_file, instance_index = 1):
+# def init_bridge_setup(range_details_file, instance_index = 1):
+#     """Create bridge map, init the setup of bridges
+#         De-activate hosts that are not connected to the Internet
+        
+#         Args:
+#         range_details_file (str): path of cyber range detail 
+#         information yaml file after creating by CyRIS
+        
+#         instance_index (int, optional): instance number of network in clone setting 
+#         that compatible with CyRIS scenario (Default = 1)
+#     """
+#     try:
+#         global bridge_map
+#         bridge_map = create_bridge_map(range_details_file, instance_index)
+#     except Exception as e:
+#         print(f"* WARNING: Failed to create bridge map: {e}", file=sys.stderr)
+
+#     conntected_subnet = list()
+#     internet = scenario.topology[0]
+
+#     for idx in range(1, len(internet)):
+#         if internet[idx] == 1:
+#             subnet_name = f'link0{idx}'
+#             conntected_subnet.append(subnet_name)
+
+#     # Deactivate bridge of hosts that are not connected to the Internet
+#     for link in bridge_map.keys():
+#         if link not in conntected_subnet:
+#             bridge_name = bridge_map[link][0]
+#             print(f"  Deactivate bridge {bridge_name}...")
+#             deactivate_bridge(bridge_name)
+            
+def init_bridge_setup():
     """Create bridge map, init the setup of bridges
-        De-activate hosts that are not connected to the Internet
-        
-        Args:
-        range_details_file (str): path of cyber range detail 
-        information yaml file after creating by CyRIS
-        
-        instance_index (int, optional): instance number of network in clone setting 
-        that compatible with CyRIS scenario (Default = 1)
+    De-activate hosts that are not connected to the Internet
     """
     try:
         global bridge_map
-        bridge_map = create_bridge_map(range_details_file, instance_index)
+        # Tạo bridge_map rỗng hoặc giả mạo
+        bridge_map = {}
+        # Với môi trường NAT sẵn sàng, tạo một bridge_map giả
+        # với các liên kết giữa các subnet
+        for i in range(5):  # Giả sử có 5 subnet (0-4)
+            for j in range(5):
+                if i != j:
+                    link_name = f'link{i}{j}'
+                    # Cấu trúc [tên_bridge, ip_bridge, trạng_thái]
+                    # Chú ý: đặt trạng thái = True để chỉ ra bridge luôn sẵn sàng
+                    bridge_map[link_name] = [f'virbr{j}', f'10.0.{j}.1', True]
+        
+        print("  Using pre-configured network environment with iptables")
     except Exception as e:
-        print(f"* WARNING: Failed to create bridge map: {e}", file=sys.stderr)
-
-    conntected_subnet = list()
-    internet = scenario.topology[0]
-
-    for idx in range(1, len(internet)):
-        if internet[idx] == 1:
-            subnet_name = f'link0{idx}'
-            conntected_subnet.append(subnet_name)
-
-    # Deactivate bridge of hosts that are not connected to the Internet
-    for link in bridge_map.keys():
-        if link not in conntected_subnet:
-            bridge_name = bridge_map[link][0]
-            print(f"  Deactivate bridge {bridge_name}...")
-            deactivate_bridge(bridge_name)
+        print(f"* WARNING: Error in bridge setup: {e}", file=sys.stderr)
 
 def init_service_port_map():
     """Create the service port map
@@ -454,62 +601,89 @@ def print_failure(action, observation, context, exec_time):
                   f"{' undefined_error=TRUE'  if observation.undefined_error  else ''}"
                   f" Execution Time: {exec_time:1.6f}[{context}]")
 
-def check_bridge_status (bridge_name):
-    """Check the status of the bridge (on/off)
+# def check_bridge_status (bridge_name):
+#     """Check the status of the bridge (on/off)
 
-    Args:
-        bridge_name (str): The name of bridge that need to activate
+#     Args:
+#         bridge_name (str): The name of bridge that need to activate
     
-    Return:
-        (bool): True if bridge is up
+#     Return:
+#         (bool): True if bridge is up
+#     """
+#     for iface, details in psutil.net_if_stats().items():
+#         if (iface == bridge_name):
+#             return details.isup
+        
+def check_bridge_status(bridge_name):
+    """Always return True for NAT environment
     """
-    for iface, details in psutil.net_if_stats().items():
-        if (iface == bridge_name):
-            return details.isup
+    # Với môi trường NAT sẵn sàng, luôn trả về True
+    return True
+
+# def activate_bridge(bridge_name):
+#     """Activate the bridge
+
+#     Args:
+#         bridge_name (str): The name of bridge that need to activate
+#     """
+#     command = f"sudo ifconfig {bridge_name} up"
+
+#     execute_script(command)
+
+
+# def deactivate_bridge(bridge_name):
+#     """De-activate the bridge
+
+#     Args:
+#         bridge_name (str): The name of bridge that need to de-activated 
+#     """
+#     command = f"sudo ifconfig {bridge_name} down"
+    
+#     # Execute script
+#     execute_script(command)
 
 def activate_bridge(bridge_name):
-    """Activate the bridge
-
-    Args:
-        bridge_name (str): The name of bridge that need to activate
+    """Function neutralized for NAT environment
     """
-    command = f"sudo ifconfig {bridge_name} up"
-
-    execute_script(command)
+    # Không làm gì với môi trường NAT
+    pass
 
 def deactivate_bridge(bridge_name):
-    """De-activate the bridge
-
-    Args:
-        bridge_name (str): The name of bridge that need to de-activated 
+    """Function neutralized for NAT environment
     """
-    command = f"sudo ifconfig {bridge_name} down"
+    # Không làm gì với môi trường NAT
+    pass
+
+# def activate_host_bridge(host):
+#     """Activate all the bridges of host when it is compromised
     
-    # Execute script
-    execute_script(command)
+#     Args:
+#         host (tuple): Current host address (e.g. (1,0))
+    
+#     Returns:
+#         activate_link_list (list): List of activate link (key in bridge_map, e.g., link01)
+#     """
+#     prefix_link = f"{host[0]}"
+#     activate_link_list = []
+
+#     for link in bridge_map.keys():
+#         if prefix_link in link:
+#             bridge_name = bridge_map[link][0]
+#             bridge_state = bridge_map[link][2]
+#             if not bridge_state:
+#                 activate_bridge(bridge_name)
+#                 bridge_map[link][2] = True
+#                 activate_link_list.append(link)
+
+#     return activate_link_list
 
 def activate_host_bridge(host):
-    """Activate all the bridges of host when it is compromised
-    
-    Args:
-        host (tuple): Current host address (e.g. (1,0))
-    
-    Returns:
-        activate_link_list (list): List of activate link (key in bridge_map, e.g., link01)
+    """Function neutralized for NAT environment
+    Returns an empty list to indicate no changes needed
     """
-    prefix_link = f"{host[0]}"
-    activate_link_list = []
-
-    for link in bridge_map.keys():
-        if prefix_link in link:
-            bridge_name = bridge_map[link][0]
-            bridge_state = bridge_map[link][2]
-            if not bridge_state:
-                activate_bridge(bridge_name)
-                bridge_map[link][2] = True
-                activate_link_list.append(link)
-
-    return activate_link_list
+    # Với môi trường NAT sẵn sàng, không cần kích hoạt bridge
+    # Trả về danh sách trống để chỉ ra không có thay đổi
+    return []
 
 def check_host_compromised_within_subnet(subnet_id):
     """Check if there is any host be compromised in the current subnet
@@ -697,8 +871,20 @@ def replace_file_path(database, file_name):
     Returns:
         (str): file path that is replaced scenario value and pengym_source value
     """
-    return database[storyboard.FILE_PATH][file_name]\
-            .replace(storyboard.SCENARIO_NAME_PATTERN, database[storyboard.SCENARIO_NAME])\
-            .replace(storyboard.PENGYM_SOURCE_PATTERN, database[storyboard.PENGYM_SOURCE])\
-            .replace(storyboard.RANGE_ID_PATTERN, str(database[storyboard.RANGE_ID]))\
-            .replace(storyboard.CYBER_RANGE_DIR_PATTERN, database[storyboard.CYBER_RANGE_DIR])
+    # Lấy đường dẫn cơ bản từ database
+    path = database[storyboard.FILE_PATH][file_name]
+    
+    # Chỉ thay thế các pattern cần thiết
+    if storyboard.SCENARIO_NAME in database:
+        path = path.replace(storyboard.SCENARIO_NAME_PATTERN, database[storyboard.SCENARIO_NAME])
+    
+    if storyboard.PENGYM_SOURCE in database:
+        path = path.replace(storyboard.PENGYM_SOURCE_PATTERN, database[storyboard.PENGYM_SOURCE])
+    
+    if storyboard.RANGE_ID in database:
+        path = path.replace(storyboard.RANGE_ID_PATTERN, str(database[storyboard.RANGE_ID]))
+    
+    # Loại bỏ hoàn toàn CYBER_RANGE_DIR_PATTERN (nếu có)
+    path = path.replace(storyboard.CYBER_RANGE_DIR_PATTERN, "")
+    
+    return path

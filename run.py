@@ -286,7 +286,7 @@ def main(args):
     utils.init_config_info(config_path)
 
     # Create an experiment environment using scenario path
-    scenario_path = utils.replace_file_path(utils.config_info, storyboard.SCENARIO_FILE) # Problem
+    scenario_path = utils.replace_file_path(utils.config_info, storyboard.SCENARIO_FILE)
     print(f"* Create environment using custom scenario from '{scenario_path}'...")
     env = create_pengym_custom_environment(scenario_path)
 
@@ -300,17 +300,13 @@ def main(args):
         print("* Initialize Nmap Scanner...")
         utils.init_nmap_scanner()
         
-        # Create host map dictionary
-        range_detail_file = utils.replace_file_path(database=utils.config_info,
-                                                     file_name=storyboard.RANGE_DETAILS_FILE)
-
-        utils.init_host_map(range_details_file=range_detail_file)
+        utils.init_host_map()
 
         # Initializer map of service ports
         utils.init_service_port_map()
     
         # Deactivate bridge that not conneccted to Internet
-        utils.init_bridge_setup(range_details_file=range_detail_file)
+        utils.init_bridge_setup()
 
     # Run experiment using a random agent
     if agent_type == AGENT_TYPE_RANDOM:
@@ -318,21 +314,41 @@ def main(args):
         done, truncated, step_count = run_random_agent(env)
 
     # Run experiment using a deterministic agent
+    # elif agent_type == AGENT_TYPE_DETERMINISTIC:
+
+    #     # Set up deterministic path
+
+    #     # Optimal path for scenario "medium-single-site" according to "medium-single-site.yaml" note
+    #     deterministic_path = [ (HOST5_1, EXPLOIT_HTTP), (HOST5_1, SUBNET_SCAN),
+    #                     (HOST2_1, EXPLOIT_SMTP), (HOST2_1, SUBNET_SCAN),
+    #                     (HOST3_1, EXPLOIT_HTTP),
+    #                     (HOST3_4, EXPLOIT_SSH), (HOST3_4, PRIVI_ESCA_TOMCAT)]
+
+    #     # Pentesting path for scenario "tiny" assuming need for service/process discovery
+    #     deterministic_path = [ (HOST5_1, OS_SCAN), (HOST5_1, SERVICE_SCAN), (HOST5_1, EXPLOIT_HTTP), (HOST5_1, SUBNET_SCAN),
+    #             (HOST2_1, OS_SCAN), (HOST2_1, SERVICE_SCAN), (HOST2_1, EXPLOIT_SMTP), (HOST2_1, SUBNET_SCAN),
+    #             (HOST3_1, OS_SCAN), (HOST3_1, SERVICE_SCAN), (HOST3_1, EXPLOIT_HTTP),
+    #             (HOST3_4, OS_SCAN), (HOST3_4, SERVICE_SCAN), (HOST3_4, EXPLOIT_SSH), (HOST3_4, PROCESS_SCAN), (HOST3_4, PRIVI_ESCA_TOMCAT)]
+
+    #     print("* Execute pentesting using a DETERMINISTIC agent...")
+    #     done, truncated, step_count = run_deterministic_agent(env, deterministic_path)
     elif agent_type == AGENT_TYPE_DETERMINISTIC:
 
         # Set up deterministic path
 
-        # Optimal path for scenario "medium-single-site" according to "medium-single-site.yaml" note
-        deterministic_path = [ (HOST5_1, EXPLOIT_HTTP), (HOST5_1, SUBNET_SCAN),
-                        (HOST2_1, EXPLOIT_SMTP), (HOST2_1, SUBNET_SCAN),
-                        (HOST3_1, EXPLOIT_HTTP),
-                        (HOST3_4, EXPLOIT_SSH), (HOST3_4, PRIVI_ESCA_TOMCAT)]
+        # Optimal path for scenario "tiny-small" according to "tiny-small.yml"
+        # (e_http, (1, 0)) -> subnet_scan -> (e_ssh, (2, 0)) -> (pe_tomcat, (2,0)) -> (e_http, (3, 1))
+        #       -> subnet_scan -> (e_ftp, (4, 0))
+        deterministic_path = [(HOST1_0, EXPLOIT_HTTP), (HOST1_0, SUBNET_SCAN),
+                            (HOST2_0, EXPLOIT_SSH), (HOST2_0, PRIVI_ESCA_TOMCAT),
+                            (HOST3_1, EXPLOIT_HTTP), (HOST3_1, SUBNET_SCAN),
+                            (HOST4_0, EXPLOIT_FTP)]
 
-        # Pentesting path for scenario "tiny" assuming need for service/process discovery
-        deterministic_path = [ (HOST5_1, OS_SCAN), (HOST5_1, SERVICE_SCAN), (HOST5_1, EXPLOIT_HTTP), (HOST5_1, SUBNET_SCAN),
-                (HOST2_1, OS_SCAN), (HOST2_1, SERVICE_SCAN), (HOST2_1, EXPLOIT_SMTP), (HOST2_1, SUBNET_SCAN),
-                (HOST3_1, OS_SCAN), (HOST3_1, SERVICE_SCAN), (HOST3_1, EXPLOIT_HTTP),
-                (HOST3_4, OS_SCAN), (HOST3_4, SERVICE_SCAN), (HOST3_4, EXPLOIT_SSH), (HOST3_4, PROCESS_SCAN), (HOST3_4, PRIVI_ESCA_TOMCAT)]
+        # Pentesting path for scenario "tiny-small" including scanning operations
+        deterministic_path = [(HOST1_0, OS_SCAN), (HOST1_0, SERVICE_SCAN), (HOST1_0, EXPLOIT_HTTP), (HOST1_0, SUBNET_SCAN),
+                            (HOST2_0, OS_SCAN), (HOST2_0, SERVICE_SCAN), (HOST2_0, EXPLOIT_SSH), (HOST2_0, PROCESS_SCAN), (HOST2_0, PRIVI_ESCA_TOMCAT),
+                            (HOST3_1, OS_SCAN), (HOST3_1, SERVICE_SCAN), (HOST3_1, EXPLOIT_HTTP), (HOST3_1, SUBNET_SCAN),
+                            (HOST4_0, OS_SCAN), (HOST4_0, SERVICE_SCAN), (HOST4_0, EXPLOIT_FTP)]
 
         print("* Execute pentesting using a DETERMINISTIC agent...")
         done, truncated, step_count = run_deterministic_agent(env, deterministic_path)
