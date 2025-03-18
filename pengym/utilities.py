@@ -79,7 +79,7 @@ def init_config_info(config_path):
     config_info = load_yaml_file(config_path)
 
 def init_msfrpc_client():
-    """Initialize the Metasploit client
+    """Initialize the Metasploit client with automatic proxy configuration
     """
     my_password = config_info[storyboard.MSFRPC_CONFIG][storyboard.MSFRPC_CLINET_PWD]
     
@@ -89,14 +89,66 @@ def init_msfrpc_client():
         host = config_info[storyboard.MSFRPC_CONFIG][storyboard.MSFRPC_HOST]
     
     port = config_info[storyboard.MSFRPC_CONFIG][storyboard.MSFRPC_PORT] 
-    ssl = config_info[storyboard.MSFRPC_CONFIG][storyboard.SSL]
+    
+    # Get SSL setting from config file without overriding
+    ssl = False  # Default value
+    if storyboard.SSL in config_info[storyboard.MSFRPC_CONFIG]:
+        ssl = config_info[storyboard.MSFRPC_CONFIG][storyboard.SSL]
+    
+    # Automatically check for proxy settings and update no_proxy environment variable if needed
+    import os
+    proxy_vars = ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY']
+    proxy_in_use = any(var in os.environ for var in proxy_vars)
+    
+    if proxy_in_use:
+        old_no_proxy = os.environ.get('no_proxy', '')
+        # Check if host is already in no_proxy
+        if host not in old_no_proxy.split(','):
+            os.environ['no_proxy'] = f"{host},{old_no_proxy}" if old_no_proxy else host
+            os.environ['NO_PROXY'] = os.environ['no_proxy']  # Set both upper and lowercase versions
+            print(f"  Proxy detected: Adding {host} to no_proxy environment variable")
+    
+    # Add timeout values with defaults
+    connection_timeout = 5  # Default timeout in seconds
+    if 'connection_timeout' in config_info[storyboard.MSFRPC_CONFIG]:
+        connection_timeout = config_info[storyboard.MSFRPC_CONFIG]['connection_timeout']
 
     try:
         global msfrpc_client
-        print(f"  Connecting to MSF RPC server at {host}:{port}...")
+        print(f"  Connecting to MSF RPC server at {host}:{port} (timeout: {connection_timeout}s, SSL: {ssl})...")
+        
+        # Use a timeout mechanism to prevent hanging
+        import socket
+        socket.setdefaulttimeout(connection_timeout)
+        
+        # Debugging: First test a raw TCP connection
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((host, port))
+            print(f"  Successfully established TCP connection to {host}:{port}")
+            s.close()
+        except Exception as e:
+            print(f"  TCP connection test failed: {e}")
+            raise
+        
+        # Now try the actual MSF RPC connection
         msfrpc_client = MsfRpcClient(my_password, server=host, port=port, ssl=ssl)
+        print("  Successfully connected to MSF RPC server")
+        
+        # Reset default timeout
+        socket.setdefaulttimeout(None)
+        
+    except socket.timeout:
+        print(f"* ERROR: Connection to MSF RPC server at {host}:{port} timed out after {connection_timeout} seconds", file=sys.stderr)
+        raise TimeoutError(f"MSF RPC connection timed out after {connection_timeout} seconds")
     except Exception as e:
         print(f"* ERROR: Failed to connect to MSF RPC client at {host}:{port}: {e}", file=sys.stderr)
+        print("* Try these troubleshooting steps:")
+        print("  1. Verify Metasploit RPC server is running: ps aux | grep msfrpcd")
+        print(f"  2. Test connection manually: echo -n | nc -v {host} {port}")
+        print(f"  3. If you're using a proxy, check your proxy settings and make sure {host} is in no_proxy")
+        print(f"  4. Confirm the password is correct in CONFIG.yml")
+        print(f"  5. Start msfrpcd with: msfrpcd -P <password> -S true -a {host} -p {port}")
         raise
 
 def cleanup_msfrpc_client():
@@ -383,7 +435,7 @@ def init_host_map():
         storyboard.HOST_IP: ["10.0.0.60"],
         storyboard.SUBNET_IP: "10.0.0.0/24",
         storyboard.KVM_DOMAIN: "cr44-host3-1",
-        storyboard.BRIDGE_UP: False,
+        storyboard.BRIDE_UP: False,
         storyboard.SHELL: None,
         storyboard.OS: None,
         storyboard.SERVICES: None,
@@ -398,7 +450,7 @@ def init_host_map():
         storyboard.SERVICE_EXPLOIT_STATE: True
     }
     
-    # Tạo cấu trúc cho host tại (4, 0) - Subnet 4, Host 0
+    # T��o cấu trúc cho host tại (4, 0) - Subnet 4, Host 0
     host_map[(4, 0)] = {
         storyboard.HOST_IP: ["10.0.1.10"],
         storyboard.SUBNET_IP: "10.0.1.0/24",
@@ -682,7 +734,7 @@ def activate_host_bridge(host):
     Returns an empty list to indicate no changes needed
     """
     # Với môi trường NAT sẵn sàng, không cần kích hoạt bridge
-    # Trả về danh sách trống để chỉ ra không có thay đổi
+    # Trả v��� danh sách trống để chỉ ra không có thay đổi
     return []
 
 def check_host_compromised_within_subnet(subnet_id):

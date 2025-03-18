@@ -15,11 +15,13 @@ scenario_name: tiny-small
 range_id: 44
 
 # Configuration of the MSF RPC service
+# Make sure to update the msfrpc_config section with the correct settings:
 msfrpc_config:
-  msfrpc_host: 44.1.0.10
-  msfrpc_client_pwd: cyuser
-  port: 55553
-  ssl: Falses
+  msfrpc_host: 44.1.0.10  # Your MSF RPC server address
+  port: 55553             # The correct port
+  msfrpc_client_pwd: "cyuser"  # Your password
+  ssl: true               # Change this to true to enable SSL
+  connection_timeout: 5   # Optional: A reasonable timeout value in seconds
 
 # Mapping of service names to port numbers
 service_port:
