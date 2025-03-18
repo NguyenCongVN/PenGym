@@ -1,4 +1,3 @@
-
 #############################################################################
 # Run demo of PenGym functionality
 #############################################################################
@@ -295,17 +294,25 @@ def main(args):
         utils.init_config_info(config_path)
         
         print("* Initialize MSF RPC client...")
-        utils.init_msfrpc_client()
+        try:
+            utils.init_msfrpc_client()
+        except Exception as e:
+            logging.error(f"Failed to initialize MSF RPC client: {e}")
+            print("* Cannot continue without Metasploit RPC connection.")
+            print("* Please ensure Metasploit is running and RPC settings are correct in CONFIG.yml.")
+            print("* Check if msfrpcd is running with: ps aux | grep msfrpcd")
+            print("* Start it with: msfrpcd -P yourpassword -S -a 127.0.0.1")
+            sys.exit(2)
         
         print("* Initialize Nmap Scanner...")
         utils.init_nmap_scanner()
         
         utils.init_host_map()
 
-        # Initializer map of service ports
+        # Initialize map of service ports
         utils.init_service_port_map()
-    
-        # Deactivate bridge that not conneccted to Internet
+
+        # Deactivate bridge that not connected to Internet
         utils.init_bridge_setup()
 
     # Run experiment using a random agent
@@ -314,24 +321,6 @@ def main(args):
         done, truncated, step_count = run_random_agent(env)
 
     # Run experiment using a deterministic agent
-    # elif agent_type == AGENT_TYPE_DETERMINISTIC:
-
-    #     # Set up deterministic path
-
-    #     # Optimal path for scenario "medium-single-site" according to "medium-single-site.yaml" note
-    #     deterministic_path = [ (HOST5_1, EXPLOIT_HTTP), (HOST5_1, SUBNET_SCAN),
-    #                     (HOST2_1, EXPLOIT_SMTP), (HOST2_1, SUBNET_SCAN),
-    #                     (HOST3_1, EXPLOIT_HTTP),
-    #                     (HOST3_4, EXPLOIT_SSH), (HOST3_4, PRIVI_ESCA_TOMCAT)]
-
-    #     # Pentesting path for scenario "tiny" assuming need for service/process discovery
-    #     deterministic_path = [ (HOST5_1, OS_SCAN), (HOST5_1, SERVICE_SCAN), (HOST5_1, EXPLOIT_HTTP), (HOST5_1, SUBNET_SCAN),
-    #             (HOST2_1, OS_SCAN), (HOST2_1, SERVICE_SCAN), (HOST2_1, EXPLOIT_SMTP), (HOST2_1, SUBNET_SCAN),
-    #             (HOST3_1, OS_SCAN), (HOST3_1, SERVICE_SCAN), (HOST3_1, EXPLOIT_HTTP),
-    #             (HOST3_4, OS_SCAN), (HOST3_4, SERVICE_SCAN), (HOST3_4, EXPLOIT_SSH), (HOST3_4, PROCESS_SCAN), (HOST3_4, PRIVI_ESCA_TOMCAT)]
-
-    #     print("* Execute pentesting using a DETERMINISTIC agent...")
-    #     done, truncated, step_count = run_deterministic_agent(env, deterministic_path)
     elif agent_type == AGENT_TYPE_DETERMINISTIC:
 
         # Set up deterministic path

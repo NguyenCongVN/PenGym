@@ -1,4 +1,3 @@
-
 # Import libraries
 import numpy as np
 import psutil
@@ -84,7 +83,7 @@ def init_msfrpc_client():
     """
     my_password = config_info[storyboard.MSFRPC_CONFIG][storyboard.MSFRPC_CLINET_PWD]
     
-    # Thêm đoạn code này để lấy giá trị host, mặc định là 127.0.0.1
+    # Get host value, default is 127.0.0.1
     host = "127.0.0.1"
     if storyboard.MSFRPC_HOST in config_info[storyboard.MSFRPC_CONFIG]:
         host = config_info[storyboard.MSFRPC_CONFIG][storyboard.MSFRPC_HOST]
@@ -94,10 +93,11 @@ def init_msfrpc_client():
 
     try:
         global msfrpc_client
+        print(f"  Connecting to MSF RPC server at {host}:{port}...")
         msfrpc_client = MsfRpcClient(my_password, server=host, port=port, ssl=ssl)
     except Exception as e:
         print(f"* ERROR: Failed to connect to MSF RPC client at {host}:{port}: {e}", file=sys.stderr)
-        sys.exit(2)
+        raise
 
 def cleanup_msfrpc_client():
     """Clean up the Metasploit client, and close sessions after the agent finishes running 
