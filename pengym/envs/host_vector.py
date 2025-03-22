@@ -1,4 +1,3 @@
-
 # Import libraries
 import time
 import logging
@@ -92,7 +91,7 @@ class PenGymHostVector(HostVector):
                 if service_scan_state:
                     # Do service scan for each IP address of host
                     for host_ip in host_ip_list:
-                        service_result, service_exec_time = self.do_service_scan(host_ip, utils.nmap_scanner, ports)
+                        service_result, service_exec_time = self.do_service_scan(host_ip, ports)
                         if service_result:
                             service_list.append(service_result)
 
@@ -145,7 +144,7 @@ class PenGymHostVector(HostVector):
                 if (os_result_dict is None and os_scan_state):
                     # Do OS scan for each IP address of host
                     for host_ip in host_ip_list:
-                        os_result, osscan_exec_time = self.do_os_scan(host_ip, utils.nmap_scanner, ports)
+                        os_result, osscan_exec_time = self.do_os_scan(host_ip, ports)
                         if (os_result):
                             # Transform to compatible Nasim result format
                             os_result_dict = utils.map_result_list_to_dict(os_result, scenario_os)
@@ -622,13 +621,15 @@ class PenGymHostVector(HostVector):
     def get_existed_meterpreter_id(self, msfrpc, host, exploit_name = None):
         """Get existing meterpreter id of the host in session list
 
-        Args:
-            msfrpc (MsfRpcClient) : msfrpc client
-            host (str): host ip address
-            exploit_name (str): Name of process that is used to exploit
+        Args
+        ---------
+        msfrpc (MsfRpcClient) : msfrpc client
+        host (str): host ip address
+        exploit_name (str): Name of process that is used to exploit
 
-        Returns:
-            session_key (str): meterpreter id of current host
+        Returns
+        -------
+        session_key (str): meterpreter id of current host
         """
         TYPE_KEY = "type"
         ROOT_LEVEL = "root"
@@ -688,128 +689,124 @@ class PenGymHostVector(HostVector):
         return access
 
     ###################################################################################
-    def do_service_scan(self, host, nm, ports=False):
-        """Perform the service scan
-
-        Args
-        ---------
-        host (str) : host ip address that is used for service scan
-        nm (NMap Scanner)
-        ports (list): list required ports for scanning
-
-        Returns
-        -------
-        services_name (list): list of service's name of current host
-        """
-
-        # Check port the existed of port
-        # -Pn: Tells Nmap not to use ping to determine if the target is up
-        # Nmap will do the requested scanning functions against every target IP specified, as if every one is active.
-        # -n: Tells Nmap not to perform DNS resolution
-        # -sS: Tells Nmap to use TCP SYN scanning
-        # -T5: Nmap should use the most aggressive timing template
-        # -sV: Nmap determine the details information about the services
-
-        SCAN = 'scan'
-        UDP = 'udp'
-        TCP = 'tcp'
-        NAME = 'name'
-        PRODUCT = 'product'
-        STATE = 'state'
-        OPEN = 'open'
-        ARGS = '-Pn -n -sS -sV -T5'
-
-        services_scan = list()
-        services_name = list()
-
-        start = time.time()
-
-        if ports:
-            ports = ', '.join(str(port) for port in ports)
-            service_scan = nm.scan(host, ports, arguments=ARGS, sudo=True)
-            services_scan.append(service_scan)
-        else:
-            service_scan = nm.scan(host, arguments=ARGS, sudo=True)
-            services_scan.append(service_scan)
+    def do_service_scan(self, host, ports=False):
+        """Thực hiện quét dịch vụ sử dụng db_nmap
         
-        end = time.time()
-
-        for service_scan in services_scan:
-            # Get the list of service from the service scan result
-
-            for ip in service_scan[SCAN].keys():
-                ip_dict = service_scan[SCAN][ip]
-
-                if UDP in ip_dict:
-                    for port_name in ip_dict[UDP]:
-                        if ip_dict[TCP][port_name][STATE] == OPEN:
-                            service = ip_dict[UDP][port_name][NAME]
-                            services_name.append(service)
-                            product = ip_dict[UDP][port_name][PRODUCT].lower()
-                            services_name.append(product)
-
-                if TCP in ip_dict:
-                    for port_name in ip_dict[TCP]:
-                        if ip_dict[TCP][port_name][STATE] == OPEN:
-                            service = ip_dict[TCP][port_name][NAME]
-                            services_name.append(service)
-                            product = ip_dict[TCP][port_name][PRODUCT].lower()
-                            services_name.append(product)
-
-        return services_name, end-start
+        Args:
+            host (str): IP của host cần quét
+            ports (list): danh sách cổng cần quét
+            
+        Returns:
+            services_name (list): danh sách tên dịch vụ
+        """
+        start = time.time()
+        
+        # Sử dụng db_nmap qua MSF RPC
+        args = "-Pn -n -sS -sV -T5"
+        
+        print(f"  [DEBUG-SERVICE] Bắt đầu quét dịch vụ trên {host} với ports={ports}")
+        
+        # Chuẩn bị danh sách cổng nếu có
+        ports_str = None
+        if ports:
+            if isinstance(ports, list):
+                ports_str = ','.join(str(port) for port in ports)
+            else:
+                ports_str = ports
+            print(f"  [DEBUG-SERVICE] Danh sách cổng: {ports_str}")
+        
+        # Chạy quét qua MSF
+        result = utils.run_db_nmap(host, ports_str, args)
+        
+        if result is None:
+            print(f"  [DEBUG-SERVICE] Kết quả db_nmap là None - không thể tiếp tục phân tích")
+            return None, time.time() - start
+        
+        # Hiển thị kết quả thô
+        print(f"  [DEBUG-SERVICE] Kết quả db_nmap raw_output (trích đoạn): {result['raw_output'][:150]}...")
+        
+        # Phân tích dịch vụ từ kết quả MSF
+        services_name = []
+        service_lines = result['services'].strip().split('\n')
+        
+        print(f"  [DEBUG-SERVICE] Số dòng trong kết quả services: {len(service_lines)}")
+        print(f"  [DEBUG-SERVICE] Nội dung đầy đủ của services:\n{result['services']}")
+        
+        # Kiểm tra định dạng của dữ liệu services
+        if len(service_lines) <= 2:
+            print(f"  [DEBUG-SERVICE] Không có dữ liệu dịch vụ hoặc định dạng không đúng!")
+        else:
+            print(f"  [DEBUG-SERVICE] Dòng tiêu đề: {service_lines[0]}")
+            print(f"  [DEBUG-SERVICE] Phân tích từng dòng dịch vụ:")
+        
+        for line in service_lines[2:]:  # Bỏ qua dòng tiêu đề
+            print(f"  [DEBUG-SERVICE] Dòng dịch vụ: '{line}'")
+            parts = line.split()
+            print(f"  [DEBUG-SERVICE] Phân tách thành: {parts}")
+            
+            # Thử xác định vị trí service name trong dòng
+            if len(parts) >= 3:
+                for i, part in enumerate(parts):
+                    if 'open' in part or 'closed' in part or 'filtered' in part:
+                        if i + 1 < len(parts):
+                            service_name = parts[i+1]
+                            print(f"  [DEBUG-SERVICE] Tìm thấy trạng thái cổng ở phần tử {i}, dịch vụ có thể là: {service_name}")
+            
+            # Logic phân tích cũ
+            if len(parts) >= 4 and 'open' in parts:
+                service_name = parts[2]
+                services_name.append(service_name)
+                print(f"  [DEBUG-SERVICE] Đã thêm dịch vụ: {service_name}")
+                # Thêm thông tin phiên bản nếu có
+                if len(parts) > 4:
+                    product = ' '.join(parts[4:]).lower()
+                    services_name.append(product)
+                    print(f"  [DEBUG-SERVICE] Đã thêm thông tin phiên bản: {product}")
+        
+        print(f"  [DEBUG-SERVICE] Kết quả cuối cùng: {services_name}")
+        return services_name, time.time() - start
 
     ###################################################################################
-    def do_os_scan(self, host, nm, ports=False):
-        """Perform the service scan
-
-        Args
-        ---------
-        host (str) : host ip address that is used for service scan
-        nm (Nmap Scanner)
-        ports (list): list required ports for scanning
-
-        Returns
-        -------
-        os_name (list): list of os name of current host
-        """
-
-        # Check port the existed of port
-        # -Pn: tells Nmap not to use ping to determine if the target is up
-        # Nmap will do the requested scanning functions against every target IP specified, as if every one is active.
-        # -n: tells Nmap not to perform DNS resolution. 
-        # -O: tells Nmap to perform operating system detection
-        # -T5: Nmap should use the most aggressive timing template
-
-        SCAN = 'scan'
-        OSMATCH = 'osmatch'
-        NAME = 'name'
-        ARGS = '-Pn -n -O -T5'
-
-        os_scan_list = list()
-        os_name = list()
-
-        start = time.time()
-
-        if ports:
-            ports = ', '.join(str(port) for port in ports)
-            osscan = nm.scan(host, ports, arguments=ARGS, sudo=True)
-            os_scan_list.append(osscan)
-        else:
-            osscan = nm.scan(host, arguments=ARGS, sudo=True)
-            os_scan_list.append(osscan)
+    def do_os_scan(self, host, ports=False):
+        """Thực hi��n quét hệ điều hành sử dụng db_nmap
         
-        end = time.time()
-
-        for osscan in os_scan_list:
-            # Get the os list from os scan result
-            for key in osscan[SCAN].keys():
-                osmatch = osscan[SCAN][key][OSMATCH]
-                if osmatch: 
-                    os = osmatch[0][NAME]
-                    os_type = os.split(' ',1)[0].lower()
-                    os_name.append(os_type)
-
-        return os_name, end-start
+        Args:
+            host (str): IP của host cần quét
+            ports (list): danh sách cổng cần quét
+            
+        Returns:
+            os_name (list): danh sách tên hệ điều hành
+        """
+        start = time.time()
+        
+        # Sử dụng db_nmap qua MSF RPC
+        args = "-Pn -n -O -T5"
+        
+        # Chuẩn bị danh sách cổng nếu có
+        ports_str = None
+        if ports:
+            if isinstance(ports, list):
+                ports_str = ','.join(str(port) for port in ports)
+            else:
+                ports_str = ports
+        
+        # Chạy quét qua MSF
+        result = utils.run_db_nmap(host, ports_str, args)
+        
+        if result is None:
+            return None, time.time() - start
+        
+        # Phân tích OS từ kết quả MSF
+        os_name = []
+        host_lines = result['hosts'].strip().split('\n')
+        for line in host_lines[2:]:  # Bỏ qua dòng tiêu đề
+            parts = line.split()
+            if len(parts) >= 2:
+                os_info = parts[1].lower()
+                os_type = os_info.split(' ', 1)[0]
+                os_name.append(os_type)
+                    
+        return os_name, time.time() - start
 
     ###################################################################################
     def do_exploit(self, host, host_ip_list, service):

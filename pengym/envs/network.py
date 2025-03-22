@@ -1,4 +1,3 @@
-
 # Import libraries
 import pengym.utilities as utils
 import logging
@@ -94,7 +93,7 @@ class PenGymNetwork(Network):
                 subnet_scan_result = utils.host_map[action.target][storyboard.SUBNET]
 
                 if (subnet_scan_result is None):
-                    subnet_scan_result = self.do_subnet_scan(subnet_ips, utils.nmap_scanner, ports)
+                    subnet_scan_result = self.do_subnet_scan(subnet_ips, ports)
                     utils.host_map[action.target][storyboard.SUBNET] = subnet_scan_result
 
                 # Map the discovered IP address to host address
@@ -237,48 +236,42 @@ class PenGymNetwork(Network):
         
         return False
 
-    def do_subnet_scan(self, subnet_address, nm, ports=False):
-        """Perform the subnet scan
+    def do_subnet_scan(self, subnet_address, ports=False):
+        """Perform the subnet scan using db_nmap
 
         Args:
-            subnet_address (str) : string of subnet address
-            nm (PortScanner): Nmap port scanner object
+            subnet_address (str): string of subnet address
             ports (list): list of ports to be scanned
 
         Returns:
             hosts_list (list): list of hosts in connected subnet
         """
-
-        # -Pn: tells Nmap not to use ping to determine if the target is up
-        # Nmap will do the requested scanning functions against every target IP specified, as if every one is active.
-        # -n: tells Nmap not to perform DNS resolution
-        # -sS: tells Nmap to use TCP SYN scanning
-        # -T5: Nmap should use the most aggressive timing template
-        # --min-paralell: specifies the minimum number of parallel probes to perform at once
-        # --max-paralell: specifies the maximum number of parallel probes to perform at once
-
-        TCP = 'tcp'
-        STATUS = 'status'
-        STATE = 'state'
-        CLOSE = 'close'
-        UP = 'up'
-        ARGS = '-Pn -n -sS -T5 --min-parallel 100 --max-parallel 100'
-
-        hosts_list = list()
-
+        # Sử dụng db_nmap qua MSF RPC
+        args = "-Pn -n -sS -T5 --min-parallelism 100 --max-parallelism 100"
+        
+        # Chuyển danh sách cổng nếu có
+        ports_str = None
         if ports:
-            for port in ports:
-                nm.scan(subnet_address, str(port), arguments=ARGS, sudo=True)
-
-                #Get the list of active host
-                for x in nm.all_hosts():
-                    if nm[x][TCP][port][STATE] != CLOSE:
-                       hosts_list.append(x)
-        else:
-            nm.scan(subnet_address, arguments=ARGS, sudo=True)
-            # This work when port is not specified
-            hosts_list = [x for x in nm.all_hosts() if nm[x][STATUS][STATE] == UP]
-
+            if isinstance(ports, list):
+                ports_str = ','.join(str(port) for port in ports)
+            else:
+                ports_str = ports
+        
+        # Chạy quét qua MSF
+        result = utils.run_db_nmap(subnet_address, ports_str, args)
+        
+        if result is None:
+            return []
+        
+        # Phân tích hosts từ kết quả MSF
+        hosts_list = []
+        host_lines = result['hosts'].strip().split('\n')
+        for line in host_lines[2:]:  # Bỏ qua dòng tiêu đề
+            parts = line.split()
+            if len(parts) >= 1:
+                host_ip = parts[0]
+                hosts_list.append(host_ip)
+                    
         return hosts_list
 
     def define_newly_discovered_hosts(self, discovery_host_list):

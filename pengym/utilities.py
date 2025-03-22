@@ -1,13 +1,15 @@
 # Import libraries
+import os
 import numpy as np
 import psutil
 from pymetasploit3.msfrpc import MsfRpcClient
 from pengym.storyboard import Storyboard
 
 import sys
-import nmap
+# Xóa import nmap
 import subprocess
 import yaml
+import time  # Thêm import time vì các hàm mới dùng đến sleep
 
 # Declare global variables
 global config_info
@@ -17,7 +19,7 @@ global bridge_map
 global service_port_map
 global host_is_discovered
 global msfrpc_client
-global nmap_scanner
+# Xóa global nmap_scanner
 global current_state
 global ENABLE_PENGYM
 global ENABLE_NASIM
@@ -31,7 +33,7 @@ host_is_discovered = list()
 
 # Declare Metasploit and Nmap objects
 msfrpc_client = None
-nmap_scanner = None
+# Xóa nmap_scanner = None
 service_port_map = None
 current_state = None
 
@@ -80,6 +82,7 @@ def init_config_info(config_path):
 
 def init_msfrpc_client():
     """Initialize the Metasploit client with automatic proxy configuration
+    and setup SOCKS proxy
     """
     my_password = config_info[storyboard.MSFRPC_CONFIG][storyboard.MSFRPC_CLINET_PWD]
     
@@ -96,7 +99,6 @@ def init_msfrpc_client():
         ssl = config_info[storyboard.MSFRPC_CONFIG][storyboard.SSL]
     
     # Automatically check for proxy settings and update no_proxy environment variable if needed
-    import os
     proxy_vars = ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY']
     proxy_in_use = any(var in os.environ for var in proxy_vars)
     
@@ -135,6 +137,33 @@ def init_msfrpc_client():
         msfrpc_client = MsfRpcClient(my_password, server=host, port=port, ssl=ssl)
         print("  Successfully connected to MSF RPC server")
         
+        # Thiết lập SOCKS proxy sau khi kết nối thành công
+        try:
+            # Lấy các tham số từ config nếu có, nếu không thì dùng giá trị mặc định
+            socks_host = "0.0.0.0"
+            socks_port = 9050
+            socks_version = 5
+            
+            if 'socks_proxy' in config_info[storyboard.MSFRPC_CONFIG]:
+                socks_config = config_info[storyboard.MSFRPC_CONFIG]['socks_proxy']
+                if 'host' in socks_config:
+                    socks_host = socks_config['host']
+                if 'port' in socks_config:
+                    socks_port = socks_config['port']
+                if 'version' in socks_config:
+                    socks_version = socks_config['version']
+            
+            print(f"  Setting up SOCKS proxy on {socks_host}:{socks_port} (version: {socks_version})...")
+            proxy_result = setup_socks_proxy(host=socks_host, port=socks_port, version=socks_version)
+            
+            if proxy_result and proxy_result.get('success'):
+                print(f"  Successfully set up SOCKS proxy with job_id: {proxy_result.get('job_id')}")
+            else:
+                print("  WARNING: SOCKS proxy setup may have failed, check proxy_result for details")
+        except Exception as e:
+            print(f"  WARNING: Error setting up SOCKS proxy: {e}")
+            # Không raise exception ở đây vì kết nối MSF đã thành công, proxy là tùy chọn
+        
         # Reset default timeout
         socket.setdefaulttimeout(None)
         
@@ -166,15 +195,102 @@ def cleanup_msfrpc_client():
                 except Exception as e:
                     print(f"* WARRNING: Failed to stop session {session_key}: {e}")
 
-def init_nmap_scanner():
-    """Initialize the nmap scanner for scanning actions
+def run_db_nmap(target, ports=None, args=None):
+    """Chạy nmap thông qua lệnh db_nmap của Metasploit
+    
+    Args:
+        target (str): IP hoặc subnet mục tiêu
+        ports (list/str, optional): Cổng cần quét
+        args (str, optional): Các tham số nmap bổ sung
+        
+    Returns:
+        dict: Kết quả quét đã được xử lý
     """
+    if msfrpc_client is None:
+        print("* LỖI: MSF RPC chưa được khởi tạo")
+        return None
+        
+    # Tạo console mới cho lần quét này
+    console_id = msfrpc_client.consoles.console().cid
+    console = msfrpc_client.consoles.console(console_id)
+    
     try:
-        global nmap_scanner
-        nmap_scanner = nmap.PortScanner()
+        print(f"  Quét {target} với db_nmap...")
+        # Tạo lệnh db_nmap
+        cmd = "db_nmap "
+        if args:
+            cmd += f"{args} "
+        if ports:
+            if isinstance(ports, list):
+                ports_str = ",".join(map(str, ports))
+                cmd += f"-p {ports_str} "
+            elif isinstance(ports, str) and ports:
+                cmd += f"-p {ports} "
+        cmd += f"{target}\n"
+        
+        # In lệnh đầy đủ để debug
+        print(f"  [DEBUG-NMAP] Lệnh đầy đủ: {cmd.strip()}")
+        
+        # Gửi lệnh
+        console.write(cmd)
+        
+        # Chờ quét hoàn tất
+        print("  [DEBUG-NMAP] Đang chờ quét hoàn tất...")
+        wait_time = 0
+        while console.is_busy():
+            time.sleep(1)
+            wait_time += 1
+            if wait_time % 5 == 0:
+                print(f"  [DEBUG-NMAP] Đã chờ {wait_time} giây...")
+            
+        # Lấy kết quả
+        print("  [DEBUG-NMAP] Quét hoàn tất, đang đọc kết quả...")
+        output = console.read()
+        print(f"  [DEBUG-NMAP] Kết quả db_nmap ban đầu: {output['data'][:200]}...")
+        
+        # Kiểm tra lỗi trong kết quả db_nmap
+        if "The following modules failed to load" in output['data'] or "ERROR" in output['data'].upper():
+            print(f"  [DEBUG-NMAP] ⚠️ Phát hiện lỗi trong kết quả db_nmap!")
+            
+        # Truy vấn thông tin host - kiểm tra xem host có được thêm vào DB không
+        print(f"  [DEBUG-NMAP] Kiểm tra host {target} có trong DB không...")
+        console.write(f"hosts -c address,os_name -S {target}\n")
+        while console.is_busy():
+            time.sleep(0.5)
+        hosts = console.read()
+        print(f"  [DEBUG-NMAP] Kết quả hosts: {hosts['data']}")
+        
+        # Truy vấn thông tin dịch vụ - kiểm tra xem có d���ch vụ nào được phát hiện không
+        print(f"  [DEBUG-NMAP] Truy vấn dịch vụ cho {target}...")
+        console.write(f"services -c port,proto,name,state,info -S {target}\n")
+        while console.is_busy():
+            time.sleep(0.5)
+        services = console.read()
+        print(f"  [DEBUG-NMAP] Kết quả services: {services['data']}")
+        
+        # Thử liệt kê dịch vụ với định dạng khác để so sánh
+        console.write(f"services -S {target}\n")
+        while console.is_busy():
+            time.sleep(0.5)
+        services_alt = console.read()
+        print(f"  [DEBUG-NMAP] Kết quả liệt kê dịch vụ đầy đủ: {services_alt['data']}")
+        
+        # Xử lý kết quả vào định dạng phù hợp
+        result = {
+            'raw_output': output['data'],
+            'hosts': hosts['data'],
+            'services': services['data'],
+        }
+        return result
     except Exception as e:
-        print(f"* WARNING: Failed to initialize NMap: {e}", file=sys.stderr)
-        sys.exit(2)
+        print(f"* LỖI khi thực hiện db_nmap: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+    finally:
+        # Dọn dẹp console
+        print("  [DEBUG-NMAP] Hủy console...")
+        msfrpc_client.consoles.destroy(console_id)
 
 def extract_network_info(range_details_file):
     """Extract network informatiion from the cyber range detail yaml file
@@ -435,7 +551,7 @@ def init_host_map():
         storyboard.HOST_IP: ["10.0.0.60"],
         storyboard.SUBNET_IP: "10.0.0.0/24",
         storyboard.KVM_DOMAIN: "cr44-host3-1",
-        storyboard.BRIDE_UP: False,
+        storyboard.BRIDGE_UP: False,
         storyboard.SHELL: None,
         storyboard.OS: None,
         storyboard.SERVICES: None,
@@ -450,7 +566,7 @@ def init_host_map():
         storyboard.SERVICE_EXPLOIT_STATE: True
     }
     
-    # T��o cấu trúc cho host tại (4, 0) - Subnet 4, Host 0
+    # Tạo cấu trúc cho host tại (4, 0) - Subnet 4, Host 0
     host_map[(4, 0)] = {
         storyboard.HOST_IP: ["10.0.1.10"],
         storyboard.SUBNET_IP: "10.0.1.0/24",
@@ -734,7 +850,7 @@ def activate_host_bridge(host):
     Returns an empty list to indicate no changes needed
     """
     # Với môi trường NAT sẵn sàng, không cần kích hoạt bridge
-    # Trả v��� danh sách trống để chỉ ra không có thay đổi
+    # Trả về danh sách trống để chỉ ra không có thay đổi
     return []
 
 def check_host_compromised_within_subnet(subnet_id):
@@ -940,3 +1056,196 @@ def replace_file_path(database, file_name):
     path = path.replace(storyboard.CYBER_RANGE_DIR_PATTERN, "")
     
     return path
+
+
+def setup_socks_proxy(host="0.0.0.0", port=9050, version=5):
+    """Thiết lập SOCKS proxy sử dụng MSF RPC
+    
+    Args:
+        host (str, optional): Địa chỉ máy chủ lắng nghe SOCKS. Mặc định là "0.0.0.0"
+        port (int, optional): Cổng lắng nghe SOCKS. Mặc định là 9050
+        version (int, optional): Phiên bản SOCKS (4 hoặc 5). Mặc định là 5
+        
+    Returns:
+        dict: Thông tin về SOCKS proxy đã thiết lập, bao gồm job_id nếu thành công
+    """
+    if msfrpc_client is None:
+        print("* LỖI: MSF RPC chưa được khởi tạo")
+        return None
+        
+    # Tạo console mới để thiết lập proxy
+    console_id = msfrpc_client.consoles.console().cid
+    console = msfrpc_client.consoles.console(console_id)
+    
+    try:
+        print(f"  Thiết lập SOCKS proxy trên {host}:{port} (phiên bản {version})...")
+        
+        # Sử dụng module SOCKS proxy
+        console.write("use auxiliary/server/socks_proxy\n")
+        while console.is_busy():
+            time.sleep(0.5)
+        
+        # Thiết lập các tham số
+        console.write(f"set SRVHOST {host}\n")
+        while console.is_busy():
+            time.sleep(0.2)
+            
+        console.write(f"set SRVPORT {port}\n")
+        while console.is_busy():
+            time.sleep(0.2)
+            
+        console.write(f"set VERSION {version}\n")
+        while console.is_busy():
+            time.sleep(0.2)
+            
+        # Chạy module ở chế độ nền
+        console.write("exploit -j\n")
+        while console.is_busy():
+            time.sleep(0.5)
+        
+        # Đọc kết quả và kiểm tra job đã được khởi tạo
+        output = console.read()
+        print(f"  [DEBUG-SOCKS] Kết quả: {output['data']}")
+        
+        # Lấy danh sách job hiện có
+        console.write("jobs\n")
+        while console.is_busy():
+            time.sleep(0.5)
+        
+        jobs_output = console.read()
+        print(f"  [DEBUG-SOCKS] Danh sách jobs: {jobs_output['data']}")
+        
+        # Phân tích job_id từ output
+        job_id = None
+        
+        # Phương pháp 1: Tìm trong output của lệnh exploit
+        import re
+        background_job_match = re.search(r"Background job (\d+) started", output['data'])
+        if background_job_match:
+            job_id = background_job_match.group(1)
+            print(f"  [DEBUG-SOCKS] Tìm thấy job_id từ thông báo Background job: {job_id}")
+        
+        # Phương pháp 2: Nếu không tìm thấy, kiểm tra từ danh sách jobs
+        if not job_id:
+            # Tìm job với tên là "auxiliary/server/socks_proxy"
+            job_lines = jobs_output['data'].strip().split('\n')
+            for line in job_lines:
+                if "socks_proxy" in line:
+                    job_match = re.search(r"^\s*(\d+)\s+", line)
+                    if job_match:
+                        job_id = job_match.group(1)
+                        print(f"  [DEBUG-SOCKS] Tìm thấy job_id từ danh sách jobs: {job_id}")
+                        break
+        
+        result = {
+            'success': job_id is not None,
+            'host': host,
+            'port': port,
+            'version': version,
+            'job_id': job_id,
+            'output': output['data'],
+            'jobs_list': jobs_output['data']
+        }
+        
+        if job_id:
+            print(f"  SOCKS proxy đã được thiết lập thành công với job_id {job_id}")
+        else:
+            print("  [DEBUG-SOCKS] Không thể xác định job_id, nhưng proxy có thể đã được khởi tạo")
+            # Tìm kiếm thông báo thành công trong output
+            if "Started SOCKS proxy" in output['data']:
+                print("  SOCKS proxy có vẻ đã được khởi động (dựa trên thông báo thành công)")
+                result['success'] = True
+            
+        return result
+        
+    except Exception as e:
+        print(f"* LỖI khi thiết lập SOCKS proxy: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            'success': False,
+            'error': str(e)
+        }
+    finally:
+        # Dọn dẹp console
+        print("  [DEBUG-SOCKS] Hủy console...")
+        msfrpc_client.consoles.destroy(console_id)
+        
+        
+def configure_proxychains():
+    """Configure Proxychains to use the SOCKS proxy set up by Metasploit
+    
+    Returns:
+        bool: True if configuration was successful, False otherwise
+    """
+    # Get proxy settings from config
+    proxy_host = "127.0.0.1"  # Default local host for client connection
+    proxy_port = 9050  # Default port
+    
+    # Check if proxy settings are in the config
+    if storyboard.MSFRPC_CONFIG in config_info:
+        msfrpc_config = config_info[storyboard.MSFRPC_CONFIG]
+        
+        # First check for socks_proxy in the nested structure (primary method)
+        if 'socks_proxy' in msfrpc_config:
+            socks_config = msfrpc_config['socks_proxy']
+            if 'host' in socks_config:
+                proxy_host = socks_config['host']
+            if 'port' in socks_config:
+                proxy_port = socks_config['port']
+        else:
+            # Fall back to checking other possible keys
+            for host_key in ["socks_host", "proxy_host", "host", storyboard.MSFRPC_HOST]:
+                if host_key in msfrpc_config:
+                    proxy_host = msfrpc_config[host_key]
+                    break
+            
+            # Try multiple possible port keys
+            for port_key in ["socks_port", "proxy_port", "port"]:
+                if port_key in msfrpc_config:
+                    proxy_port = msfrpc_config[port_key]
+                    break
+    
+    print(f"  Configuring proxychains to use SOCKS proxy at {proxy_host}:{proxy_port}...")
+    
+    # Determine which config file to use - prefer user config
+    user_config_dir = os.path.expanduser("~/.proxychains")
+    user_config_file = os.path.join(user_config_dir, "proxychains.conf")
+    
+    # Create user config directory if it doesn't exist
+    if not os.path.exists(user_config_dir):
+        try:
+            os.makedirs(user_config_dir)
+        except Exception as e:
+            print(f"* ERROR: Could not create directory {user_config_dir}: {e}", file=sys.stderr)
+            return False
+    
+    # Create the config content
+    config_content = f"""# ProxyChains configuration file - automatically generated
+# For PenGym environment
+
+# Dynamic chain mode - each connection through the proxy list
+dynamic_chain
+
+# Proxy DNS requests through the proxy
+proxy_dns
+
+# Timeout settings
+tcp_read_time_out 15000
+tcp_connect_time_out 8000
+
+# Proxy list - add your proxies here
+[ProxyList]
+# Format: <proxy_type> <ip> <port>
+socks5 {proxy_host} {proxy_port}
+"""
+    
+    # Write the config file
+    try:
+        with open(user_config_file, 'w') as f:
+            f.write(config_content)
+        print(f"  Successfully configured proxychains at {user_config_file}")
+        return True
+    except Exception as e:
+        print(f"* ERROR: Failed to write proxychains config file: {e}", file=sys.stderr)
+        return False
