@@ -1,6 +1,8 @@
 
 # Store various constant values used by PenGym
 class Storyboard():
+    DEBUG = True
+    
     # Constant values for getting config information
     CYBER_RANGE = 'cyber_range'
     HOST = 'host'

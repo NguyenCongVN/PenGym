@@ -35,51 +35,6 @@ ACTION_NAMES = {SUBNET_SCAN: "subnet_scan", OS_SCAN: "os_scan", SERVICE_SCAN: "s
                 EXPLOIT_SSH: "e_ssh",  EXPLOIT_FTP: "e_ftp", EXPLOIT_SAMBA: "e_samba", EXPLOIT_SMTP: "e_smtp", EXPLOIT_HTTP: "e_http", 
                 PRIVI_ESCA_TOMCAT: "pe_tomcat", PRIVI_ESCA_PROFTPD: "pe_daclsvc", PRIVI_ESCA_CRON: "pe_schtask"}
 
-# HOST1_0 = 'host1-0'
-# HOST1_1 = 'host1-1'
-# HOST1_2 = 'host1-2'
-# HOST1_3 = 'host1-3'
-# HOST1_4 = 'host1-4'
-# HOST1_5 = 'host1-5'
-# HOST1_6 = 'host1-6'
-# HOST1_7 = 'host1-7'
-# HOST1_8 = 'host1-8'
-# HOST1_9 = 'host1-9'
-# HOST1_10 = 'host1-10'
-# HOST1_11 = 'host1-11'
-# HOST1_12 = 'host1-12'
-# HOST1_13 = 'host1-13'
-# HOST1_14 = 'host1-14'
-# HOST1_15 = 'host1-15'
-# HOST2_0 = 'host2-0'
-# HOST2_1 = 'host2-1'
-# HOST3_0 = 'host3-0'
-# HOST3_1 = 'host3-1'
-# HOST3_2 = 'host3-2'
-# HOST3_3 = 'host3-3'
-# HOST3_4 = 'host3-4'
-# HOST3_5 = 'host3-5'
-# HOST4_0 = 'host4-0'
-# HOST4_1 = 'host4-1'
-# HOST4_2 = 'host4-2'
-# HOST4_3 = 'host4-3'
-# HOST4_4 = 'host4-4'
-# HOST5_0 = 'host5-0'
-# HOST5_1 = 'host5-1'
-# HOST5_2 = 'host5-2'
-# HOST5_3 = 'host5-3'
-# HOST6_0 = 'host6-0'
-# HOST6_1 = 'host6-1'
-
-# ACTION_TARGETS = {HOST1_0: (1, 0), HOST1_1: (1, 1), HOST1_2: (1, 2), HOST1_3: (1, 3), HOST1_4: (1, 4), HOST1_5: (1, 5), HOST1_6: (1, 6), HOST1_7: (1, 7), 
-#                   HOST1_8: (1, 8), HOST1_9: (1, 9), HOST1_10: (1, 10), HOST1_11: (1, 11), HOST1_12: (1, 12), HOST1_13: (1, 13), HOST1_14: (1, 14), HOST1_15: (1, 15),
-#                   HOST2_0: (2, 0), HOST2_1: (2, 1), 
-#                   HOST3_0: (3, 0), HOST3_1: (3, 1), HOST3_2: (3, 3), HOST3_3: (3, 3), HOST3_4: (3, 4), HOST3_5: (3, 5), 
-#                   HOST4_0: (4, 0), HOST4_1: (4, 1),
-#                   HOST5_0: (5, 0), HOST5_1: (5, 1),
-#                   HOST6_0: (6, 0), HOST6_1: (6, 1)}
-
-
 HOST1_0 = 'host1-0'
 HOST2_0 = 'host2-0'
 HOST3_0 = 'host3-0'
@@ -155,35 +110,88 @@ def run_deterministic_agent(env, deterministic_path):
     done = False # Indicate that execution is done
     truncated = False # Indicate that execution is truncated
     step_count = 0 # Count the number of execution steps
+    total_reward = 0 # Tổng reward nhận được trong quá trình thực thi
+    
+    print("\n===== BẮT ĐẦU CHẠY DETERMINISTIC AGENT =====")
+    print(f"[DEBUG] Tổng số bước trong deterministic path: {len(deterministic_path)}")
+    print(f"[DEBUG] Chi tiết đường dẫn: {deterministic_path}")
 
     # Loop while the experiment is not finished (pentesting goal not reached)
     # and not truncated (aborted because of exceeding maximum number of steps)
     while not done and not truncated:
         # Exit if there are no more steps in the deterministic path
         if step_count >= len(deterministic_path):
+            print("[DEBUG] Đã hết các bước trong deterministic path")
             break
-
+        
         # Retrieve the next action to be executed
         action_tuple = deterministic_path[step_count]
         action = select_action(env.action_space, ACTION_NAMES[action_tuple[1]], ACTION_TARGETS[action_tuple[0]])
+        
+        print(f"\n[DEBUG] ----- THỰC THI BƯỚC {step_count + 1}/{len(deterministic_path)} -----")
+        print(f"[DEBUG] Action tuple: {action_tuple}")
+        print(f"[DEBUG] Tên hành động: {ACTION_NAMES[action_tuple[1]]}")
+        print(f"[DEBUG] Mục tiêu: {ACTION_TARGETS[action_tuple[0]]}")
+        print(f"[DEBUG] Action đã chuyển đổi: {action}")
 
         # Increment step count and execute action
         step_count = step_count + 1
         
         print(f"- Step {step_count}: {action}")
+        
+        # Bắt đầu đo thời gian thực thi
+        import time
+        start_time = time.time()
           
         observation, reward, done, truncated, info = env.step(action)
-
+        
+        # Kết thúc đo thời gian thực thi
+        end_time = time.time()
+        execution_time = end_time - start_time
+        
+        # Cập nhật tổng reward
+        total_reward += reward
+        
+        print(f"[DEBUG] Thời gian thực thi: {execution_time:.4f} giây")
+        print(f"[DEBUG] Reward: {reward} (Tổng: {total_reward})")
+        print(f"[DEBUG] Done: {done}, Truncated: {truncated}")
+        print(f"[DEBUG] Info: {info}")
+        
+        # Hiển thị một phần của observation để debug
+        if hasattr(observation, "shape"):  # Nếu observation là array hoặc tensor
+            print(f"[DEBUG] Observation shape: {observation.shape}")
+            # Hiển thị observation nếu là tensor
+            if len(observation.shape) > 1:
+                print(f"[DEBUG] Observation: {observation[:5]}")
+            else:
+                print(f"[DEBUG] Observation: {observation}")
+        else:  # Nếu observation là dict hoặc cấu trúc khác
+            print(f"[DEBUG] Observation type: {type(observation)}")
+            
         if RENDER_OBS_STATE:
+            print("[DEBUG] Rendering observation and state...")
             env.render() # render most recent observation
             env.render_state() # render most recent state
 
         # Conditional exit (for debugging purposes)
         if step_count >= MAX_STEPS:
+            print(f"[DEBUG] CẢNH BÁO: Vượt quá số bước tối đa ({MAX_STEPS})")
             logging.warning(f"Abort execution after {step_count} steps")
             break
 
+    # In thông tin tổng kết sau khi hoàn thành
+    print("\n===== KẾT QUẢ THỰC THI =====")
+    print(f"[DEBUG] Tổng số bước đã thực hiện: {step_count}/{len(deterministic_path)}")
+    print(f"[DEBUG] Tổng reward: {total_reward}")
+    print(f"[DEBUG] Hoàn thành mục tiêu: {done}")
+    print(f"[DEBUG] Bị truncate: {truncated}")
+    print(f"[DEBUG] Lý do kết thúc: {'Đạt mục tiêu' if done else 'Hết bước' if step_count >= len(deterministic_path) else 'Vượt quá số bước tối đa' if step_count >= MAX_STEPS else 'Bị truncate'}")
+    print("================================\n")
+
     return done, truncated, step_count
+
+
+
 
 # Create PenGym environment using scenario 'scenario_name'
 def create_pengym_environment(scenario_name):
@@ -328,16 +336,18 @@ def main(args):
         # Optimal path for scenario "tiny-small" according to "tiny-small.yml"
         # (e_http, (1, 0)) -> subnet_scan -> (e_ssh, (2, 0)) -> (pe_tomcat, (2,0)) -> (e_http, (3, 1))
         #       -> subnet_scan -> (e_ftp, (4, 0))
-        deterministic_path = [(HOST1_0, EXPLOIT_HTTP), (HOST1_0, SUBNET_SCAN),
-                            (HOST2_0, EXPLOIT_SSH), (HOST2_0, PRIVI_ESCA_TOMCAT),
-                            (HOST3_1, EXPLOIT_HTTP), (HOST3_1, SUBNET_SCAN),
-                            (HOST4_0, EXPLOIT_FTP)]
+        # deterministic_path = [(HOST1_0, EXPLOIT_HTTP), (HOST1_0, SUBNET_SCAN),
+        #                     (HOST2_0, EXPLOIT_SSH), (HOST2_0, PRIVI_ESCA_TOMCAT),
+        #                     (HOST3_1, EXPLOIT_HTTP), (HOST3_1, SUBNET_SCAN),
+        #                     (HOST4_0, EXPLOIT_FTP)]
 
         # Pentesting path for scenario "tiny-small" including scanning operations
-        deterministic_path = [(HOST1_0, OS_SCAN), (HOST1_0, SERVICE_SCAN), (HOST1_0, EXPLOIT_HTTP), (HOST1_0, SUBNET_SCAN),
-                            (HOST2_0, OS_SCAN), (HOST2_0, SERVICE_SCAN), (HOST2_0, EXPLOIT_SSH), (HOST2_0, PROCESS_SCAN), (HOST2_0, PRIVI_ESCA_TOMCAT),
-                            (HOST3_1, OS_SCAN), (HOST3_1, SERVICE_SCAN), (HOST3_1, EXPLOIT_HTTP), (HOST3_1, SUBNET_SCAN),
-                            (HOST4_0, OS_SCAN), (HOST4_0, SERVICE_SCAN), (HOST4_0, EXPLOIT_FTP)]
+        # deterministic_path = [(HOST1_0, OS_SCAN), (HOST1_0, SERVICE_SCAN), (HOST1_0, EXPLOIT_HTTP), (HOST1_0, SUBNET_SCAN),
+        #                     (HOST2_0, OS_SCAN), (HOST2_0, SERVICE_SCAN), (HOST2_0, EXPLOIT_SSH), (HOST2_0, PROCESS_SCAN), (HOST2_0, PRIVI_ESCA_TOMCAT),
+        #                     (HOST3_1, OS_SCAN), (HOST3_1, SERVICE_SCAN), (HOST3_1, EXPLOIT_HTTP), (HOST3_1, SUBNET_SCAN),
+        #                     (HOST4_0, OS_SCAN), (HOST4_0, SERVICE_SCAN), (HOST4_0, EXPLOIT_FTP)]
+        
+        deterministic_path = [(HOST1_0, PROCESS_SCAN)]
 
         print("* Execute pentesting using a DETERMINISTIC agent...")
         done, truncated, step_count = run_deterministic_agent(env, deterministic_path)

@@ -21,7 +21,7 @@ expect "Escape character is"
 # Send 'Enter' to access the console
 send "\r"
 
-set timeout 1 ;# Set a timeout value in seconds
+set timeout 5 ;# Set a timeout value in seconds
 expect {
     "login:" {
         # Login prompt found, send the password
@@ -46,6 +46,9 @@ expect {
 # Send the command to execute on the virtual machine
 send "$del_default_gw\r"
 send "$add_default_gw\r"
+
+# Send logout
+send "exit\r"
 
 # Detach from the console (Ctrl + square_bracket)
 send "\x1d"

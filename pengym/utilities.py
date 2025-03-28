@@ -54,20 +54,15 @@ def load_yaml_file(file_path):
         sys.exit(2)
 
 def execute_script(command):
-    """Execute the shell command script
-        
-        Args:
-            command (str): shell command
-        """
-
     # Execute the command and capture the output
     result = subprocess.run(command, shell=True, capture_output=True, text=True)
-
+    
     # Check the return code
     if result.returncode == 0:
-        pass
+        return True
     else:
         print("Error: ", result.stderr)
+        raise Exception(f"Command failed: {result.stderr}")
 
 def init_config_info(config_path):
     """Parse the config file into config information
@@ -292,7 +287,7 @@ def create_host_map(range_details_file, instance_index):
 
     return map
 
-def create_bridge_map(range_details_file, instance_index):
+def create_bridge_map():
     """Create bridge_map dictionary to map NASim subnet link to name of bridge. 
     
     Args:
@@ -305,36 +300,6 @@ def create_bridge_map(range_details_file, instance_index):
     Returns:
         bridge_map: bridge_map dictionary
     """
-    
-    # yaml_dict = load_yaml_file(range_details_file)
-    
-    # bridge_map = dict()
-    # brige_info = list
-    # bridge_info = None
-    
-    # # Get the instance of the cyber range
-    # for instance in yaml_dict[storyboard.HOSTS][0][storyboard.INSTANCES]:
-    #     if instance[storyboard.INSTANCE_INDEX] == instance_index:
-    #         guest_list = instance[storyboard.GUESTS]
-    #         break
-    
-    # for guest in guest_list:
-        
-    #     ip_address = guest[storyboard.IP_ADDRESSES]
-    #     networks = dict(guest[storyboard.NETWORKS])
-        
-    #     # Map bridge name to corresponding network link
-    #     for key, link in networks.items():
-    #         if link not in bridge_map:
-    #             if bridge_info is None:
-    #                 bridge_idx = '-'.join(ip_address[key].split('.')[:-1])
-    #                 bridge_name = f"br{bridge_idx}"
-    #             else:
-    #                 bridge_name = bridge_info[link]
-    #             bridge_ip = ip_address[key][:-1] + "1"
-    #             brige_info = [bridge_name, bridge_ip, False]
-    #             bridge_map[link] = brige_info
-    
     # Bỏ qua tham số range_details_file và tạo bridge_map cố định
     bridge_map = {
         'link01': ['virbr1', '192.168.100.1', False],  # Internet đến Subnet 1
@@ -343,22 +308,6 @@ def create_bridge_map(range_details_file, instance_index):
         'link34': ['virbr4', '10.0.1.1', False]        # Subnet 3 đến Subnet 4
     }
     return bridge_map
-
-# def init_host_map(range_details_file, instance_index = 1):
-#     """Initialize the host map global variable
-
-#     Args:
-#         range_details_file (str): path of cyber range detail 
-#         information yaml file after creating by CyRIS
-        
-#         instance_index (int, optional): instance number of network in clone setting 
-#         that compatible with CyRIS scenario (Default = 1)
-#     """
-#     try:
-#         global host_map
-#         host_map = create_host_map(range_details_file, instance_index)
-#     except Exception as e:
-#         print(f"* WARNING: Failed to create host map: {e}", file=sys.stderr)
 
 def init_host_map():
     """Khởi tạo thủ công host_map cho môi trường có sẵn
@@ -374,7 +323,7 @@ def init_host_map():
     host_map[(1, 0)] = {
         storyboard.HOST_IP: ["192.168.100.10"],             # IP của host
         storyboard.SUBNET_IP: "192.168.100.0/24",           # Subnet
-        storyboard.KVM_DOMAIN: "cr44-host1-0",              # Tên domain trong KVM
+        storyboard.KVM_DOMAIN: "subnet1-host0",              # Tên domain trong KVM
         storyboard.BRIDGE_UP: False,                        # Trạng thái bridge
         storyboard.SHELL: None,                             # Shell object
         storyboard.OS: None,                                # OS value
@@ -394,7 +343,7 @@ def init_host_map():
     host_map[(2, 0)] = {
         storyboard.HOST_IP: ["172.18.1.10"],
         storyboard.SUBNET_IP: "172.18.1.0/24",
-        storyboard.KVM_DOMAIN: "cr44-host2-0",
+        storyboard.KVM_DOMAIN: "subnet2-host0",
         storyboard.BRIDGE_UP: False,
         storyboard.SHELL: None,
         storyboard.OS: None,
@@ -414,7 +363,7 @@ def init_host_map():
     host_map[(3, 0)] = {
         storyboard.HOST_IP: ["10.0.0.10"],
         storyboard.SUBNET_IP: "10.0.0.0/24",
-        storyboard.KVM_DOMAIN: "cr44-host3-0",
+        storyboard.KVM_DOMAIN: "subnet3-host0",
         storyboard.BRIDGE_UP: False,
         storyboard.SHELL: None,
         storyboard.OS: None,
@@ -434,8 +383,8 @@ def init_host_map():
     host_map[(3, 1)] = {
         storyboard.HOST_IP: ["10.0.0.60"],
         storyboard.SUBNET_IP: "10.0.0.0/24",
-        storyboard.KVM_DOMAIN: "cr44-host3-1",
-        storyboard.BRIDE_UP: False,
+        storyboard.KVM_DOMAIN: "subnet3-host1",
+        storyboard.BRIDGE_UP: False,
         storyboard.SHELL: None,
         storyboard.OS: None,
         storyboard.SERVICES: None,
@@ -454,7 +403,7 @@ def init_host_map():
     host_map[(4, 0)] = {
         storyboard.HOST_IP: ["10.0.1.10"],
         storyboard.SUBNET_IP: "10.0.1.0/24",
-        storyboard.KVM_DOMAIN: "cr44-host4-0",
+        storyboard.KVM_DOMAIN: "subnet4-host0",
         storyboard.BRIDGE_UP: False,
         storyboard.SHELL: None,
         storyboard.OS: None,
@@ -492,65 +441,64 @@ def reset_host_map():
         host_map[address][storyboard.OS_SCAN_STATE] = True
         host_map[address][storyboard.SERVICE_EXPLOIT_STATE] = True
 
-# def init_bridge_setup(range_details_file, instance_index = 1):
-#     """Create bridge map, init the setup of bridges
-#         De-activate hosts that are not connected to the Internet
-        
-#         Args:
-#         range_details_file (str): path of cyber range detail 
-#         information yaml file after creating by CyRIS
-        
-#         instance_index (int, optional): instance number of network in clone setting 
-#         that compatible with CyRIS scenario (Default = 1)
-#     """
-#     try:
-#         global bridge_map
-#         bridge_map = create_bridge_map(range_details_file, instance_index)
-#     except Exception as e:
-#         print(f"* WARNING: Failed to create bridge map: {e}", file=sys.stderr)
-
-#     conntected_subnet = list()
-#     internet = scenario.topology[0]
-
-#     for idx in range(1, len(internet)):
-#         if internet[idx] == 1:
-#             subnet_name = f'link0{idx}'
-#             conntected_subnet.append(subnet_name)
-
-#     # Deactivate bridge of hosts that are not connected to the Internet
-#     for link in bridge_map.keys():
-#         if link not in conntected_subnet:
-#             bridge_name = bridge_map[link][0]
-#             print(f"  Deactivate bridge {bridge_name}...")
-#             deactivate_bridge(bridge_name)
-            
 def init_bridge_setup():
     """Create bridge map, init the setup of bridges
-    De-activate hosts that are not connected to the Internet
+        De-activate hosts that are not connected to the Internet
+        
+        Args:
+        range_details_file (str): path of cyber range detail 
+        information yaml file after creating by CyRIS
+        
+        instance_index (int, optional): instance number of network in clone setting 
+        that compatible with CyRIS scenario (Default = 1)
     """
     try:
         global bridge_map
-        # Tạo bridge_map rỗng hoặc giả mạo
-        bridge_map = {}
-        # Với môi trường NAT sẵn sàng, tạo một bridge_map giả
-        # với các liên kết giữa các subnet
-        for i in range(5):  # Giả sử có 5 subnet (0-4)
-            for j in range(5):
-                if i != j:
-                    link_name = f'link{i}{j}'
-                    # Cấu trúc [tên_bridge, ip_bridge, trạng_thái]
-                    # Chú ý: đặt trạng thái = True để chỉ ra bridge luôn sẵn sàng
-                    bridge_map[link_name] = [f'virbr{j}', f'10.0.{j}.1', True]
-        
-        print("  Using pre-configured network environment with iptables")
+        bridge_map = create_bridge_map()
     except Exception as e:
-        print(f"* WARNING: Error in bridge setup: {e}", file=sys.stderr)
+        print(f"* WARNING: Failed to create bridge map: {e}", file=sys.stderr)
+
+    conntected_subnet = list()
+    internet = scenario.topology[0]
+
+    for idx in range(1, len(internet)):
+        if internet[idx] == 1:
+            subnet_name = f'link0{idx}'
+            conntected_subnet.append(subnet_name)
+
+    # Deactivate bridge of hosts that are not connected to the Internet
+    for link in bridge_map.keys():
+        if link not in conntected_subnet:
+            bridge_name = bridge_map[link][0]
+            print(f"  Deactivate bridge {bridge_name}...")
+            deactivate_bridge(bridge_name)
 
 def init_service_port_map():
     """Create the service port map
     """
+    # Khai báo sử dụng biến toàn cục service_port_map
     global service_port_map 
+    
+    # Gán giá trị từ cấu hình cho biến toàn cục
     service_port_map = config_info[storyboard.SERVICE_PORT]
+    
+    # Debug: In ra thông tin về service_port_map
+    print(f"[DEBUG] Đã khởi tạo service_port_map")
+    print(f"[DEBUG] Số lượng dịch vụ trong map: {len(service_port_map)}")
+    
+    # Debug: In chi tiết các dịch vụ và cổng tương ứng
+    print("[DEBUG] Chi tiết mapping dịch vụ-cổng:")
+    for service, port in service_port_map.items():
+        print(f"[DEBUG]  - {service}: {port}")
+    
+    # Debug: Kiểm tra một số dịch vụ quan trọng
+    important_services = ["ssh", "http", "https", "ftp", "smb"]
+    print("[DEBUG] Kiểm tra các dịch vụ quan trọng:")
+    for service in important_services:
+        if service.upper() in service_port_map:
+            print(f"[DEBUG]  - {service.upper()}: {service_port_map[service.upper()]}")
+        else:
+            print(f"[DEBUG]  - {service.upper()}: Không có trong map")
 
 def map_result_list_to_dict(resultValues, scenarioValues, bool=False):
     """Transform the result values from PenGym format (list) to NASim format (dictionary of all values in scenario with True/False)
@@ -653,89 +601,70 @@ def print_failure(action, observation, context, exec_time):
                   f"{' undefined_error=TRUE'  if observation.undefined_error  else ''}"
                   f" Execution Time: {exec_time:1.6f}[{context}]")
 
-# def check_bridge_status (bridge_name):
-#     """Check the status of the bridge (on/off)
-
-#     Args:
-#         bridge_name (str): The name of bridge that need to activate
-    
-#     Return:
-#         (bool): True if bridge is up
-#     """
-#     for iface, details in psutil.net_if_stats().items():
-#         if (iface == bridge_name):
-#             return details.isup
+def check_bridge_status (bridge_name):
+    """Kiểm tra trạng thái của bridge (bật/tắt)
+    Hàm này kiểm tra xem bridge mạng có đang hoạt động hay không bằng cách
+    tìm bridge theo tên trong danh sách các giao diện mạng và kiểm tra trạng thái.
+        bridge_name (str): Tên của bridge cần kiểm tra trạng thái
+    Returns:
+        bool: True nếu bridge đang hoạt động, False nếu không tìm thấy hoặc không hoạt động
+    Ví dụ:
+        >>> check_bridge_status("br0")
+        True
+    # Duyệt qua các giao diện mạng và thông tin chi tiết của chúng
+        # Nếu tìm thấy giao diện trùng với tên bridge cần kiểm tra
+            # Trả về trạng thái hoạt động của bridge
+    # Trả về False nếu không tìm thấy bridge
+    return False
+    """
+    for iface, details in psutil.net_if_stats().items():
+        if (iface == bridge_name):
+            return details.isup
         
-def check_bridge_status(bridge_name):
-    """Always return True for NAT environment
-    """
-    # Với môi trường NAT sẵn sàng, luôn trả về True
-    return True
-
-# def activate_bridge(bridge_name):
-#     """Activate the bridge
-
-#     Args:
-#         bridge_name (str): The name of bridge that need to activate
-#     """
-#     command = f"sudo ifconfig {bridge_name} up"
-
-#     execute_script(command)
-
-
-# def deactivate_bridge(bridge_name):
-#     """De-activate the bridge
-
-#     Args:
-#         bridge_name (str): The name of bridge that need to de-activated 
-#     """
-#     command = f"sudo ifconfig {bridge_name} down"
-    
-#     # Execute script
-#     execute_script(command)
-
 def activate_bridge(bridge_name):
-    """Function neutralized for NAT environment
+    """Activate the bridge
+
+    Args:
+        bridge_name (str): The name of bridge that need to activate
     """
-    # Không làm gì với môi trường NAT
-    pass
+    command = f"sudo ifconfig {bridge_name} up"
+
+    execute_script(command)
+
 
 def deactivate_bridge(bridge_name):
-    """Function neutralized for NAT environment
+    """De-activate the bridge
+
+    Args:
+        bridge_name (str): The name of bridge that need to de-activated 
     """
-    # Không làm gì với môi trường NAT
-    pass
-
-# def activate_host_bridge(host):
-#     """Activate all the bridges of host when it is compromised
+    command = f"sudo ifconfig {bridge_name} down"
     
-#     Args:
-#         host (tuple): Current host address (e.g. (1,0))
-    
-#     Returns:
-#         activate_link_list (list): List of activate link (key in bridge_map, e.g., link01)
-#     """
-#     prefix_link = f"{host[0]}"
-#     activate_link_list = []
-
-#     for link in bridge_map.keys():
-#         if prefix_link in link:
-#             bridge_name = bridge_map[link][0]
-#             bridge_state = bridge_map[link][2]
-#             if not bridge_state:
-#                 activate_bridge(bridge_name)
-#                 bridge_map[link][2] = True
-#                 activate_link_list.append(link)
-
-#     return activate_link_list
+    # Execute script
+    execute_script(command)
 
 def activate_host_bridge(host):
-    """Function neutralized for NAT environment
-    Returns an empty list to indicate no changes needed
+    """Activate all the bridges of host when it is compromised
+    
+    Args:
+        host (tuple): Current host address (e.g. (1,0))
+    
+    Returns:
+        activate_link_list (list): List of activate link (key in bridge_map, e.g., link01)
     """
-    # Với môi trường NAT sẵn sàng, không cần kích hoạt bridge
-    # Trả v��� danh sách trống để chỉ ra không có thay đổi
-    return []
+    prefix_link = f"{host[0]}"
+    activate_link_list = []
+
+    for link in bridge_map.keys():
+        if prefix_link in link:
+            bridge_name = bridge_map[link][0]
+            bridge_state = bridge_map[link][2]
+            if not bridge_state:
+                activate_bridge(bridge_name)
+                bridge_map[link][2] = True
+                activate_link_list.append(link)
+
+    return activate_link_list
 
 def check_host_compromised_within_subnet(subnet_id):
     """Check if there is any host be compromised in the current subnet
@@ -855,23 +784,50 @@ def open_firewall_rule_e_samba(host):
     vm_name = host_map[host][storyboard.KVM_DOMAIN]
     add_firewall_rules(script_path, vm_name, None)
 
-def update_default_gw (target_host, bridge_ip):
+def update_default_gw(target_host, bridge_ip):
     """Update the active default gw of a host
 
     Args:
         target_host (tuple): host need to update gw
         bridge_ip (str): ip address of bridge that is active
     """
+    # In thông tin đầu vào
+    print(f"[DEBUG GW] Bắt đầu cập nhật default gateway cho host {target_host}")
+    print(f"[DEBUG GW] Sử dụng bridge IP: {bridge_ip}")
 
     script_path = 'pengym/envs/scripts/del_add_default_gw.exp'
     vm_name = host_map[target_host][storyboard.KVM_DOMAIN]
     
+    # In thông tin các biến được sử dụng
+    print(f"[DEBUG GW] Đường dẫn script: {script_path}")
+    print(f"[DEBUG GW] Tên máy ảo: {vm_name}")
+    
     command = f'expect {script_path} {vm_name} {bridge_ip}'
+    print(f"[DEBUG GW] Lệnh thực thi: {command}")
+
+    # Kiểm tra xem máy ảo có đang chạy không
+    try:
+        check_vm_cmd = f"virsh domstate {vm_name}"
+        result = subprocess.run(check_vm_cmd, shell=True, capture_output=True, text=True)
+        print(f"[DEBUG GW] Trạng thái máy ảo: {result.stdout.strip()}")
+        
+        if "running" not in result.stdout:
+            print(f"[DEBUG GW] CẢNH BÁO: Máy ảo {vm_name} không ở trạng thái running")
+    except Exception as e:
+        print(f"[DEBUG GW] Lỗi khi kiểm tra trạng thái máy ảo: {e}")
 
     # Execute script
-    execute_script(command)
+    try:
+        print(f"[DEBUG GW] Bắt đầu thực thi script...")
+        execute_script(command)
+        print(f"[DEBUG GW] Đã thực thi script thành công")
+    except Exception as e:
+        print(f"[DEBUG GW] Lỗi khi thực thi script: {e}")
+        raise  # Truyền lỗi lên cấp cao hơn
+
+    print(f"[DEBUG GW] Hoàn thành cập nhật default gateway cho host {target_host}")
     
-def check_and_update_available_gw (target_host):
+def check_and_update_available_gw(target_host):
     """Check if the current default gw of the currennt host is active or not; 
     Update the default gw of the current host to active address 
     It is used to check the pre condition of exploit action
@@ -879,16 +835,51 @@ def check_and_update_available_gw (target_host):
     Args:
         target_host (tuple): host need to update gw
     """
+    print(f"[DEBUG GW] Bắt đầu kiểm tra và cập nhật gateway cho host {target_host}")
     subnet = target_host[0]
+    print(f"[DEBUG GW] Subnet ID của host: {subnet}")
+    
+    # Lấy thông tin host hiện tại để debug
+    vm_name = host_map[target_host][storyboard.KVM_DOMAIN]
+    print(f"[DEBUG GW] Máy ảo: {vm_name}")
+    print(f"[DEBUG GW] Trạng thái DEFAULT_GW hiện tại: {host_map[target_host][storyboard.DEFAULT_GW]}")
+    
+    # Hiển thị thông tin bridge_map để debug
+    print(f"[DEBUG GW] Danh sách bridge_map: {bridge_map}")
     
     # Get list of connected bridge to this host
+    found_bridge = False
     for link, bridge_info in bridge_map.items():
+        print(f"[DEBUG GW] Kiểm tra link: {link}, bridge_info: {bridge_info}")
         if str(subnet) in link:
+            print(f"[DEBUG GW] Tìm thấy link phù hợp với subnet {subnet}: {link}")
             bridge_name = bridge_info[0]
-            if check_bridge_status(bridge_name):
-                update_default_gw(target_host, bridge_info[1])
-                host_map[target_host][storyboard.DEFAULT_GW] = True
-                break
+            print(f"[DEBUG GW] Tên bridge: {bridge_name}")
+            
+            # Kiểm tra trạng thái bridge
+            bridge_status = check_bridge_status(bridge_name)
+            print(f"[DEBUG GW] Trạng thái bridge {bridge_name}: {'UP' if bridge_status else 'DOWN'}")
+            
+            if bridge_status:
+                print(f"[DEBUG GW] Bridge {bridge_name} đang hoạt động, cập nhật gateway cho host {target_host}")
+                print(f"[DEBUG GW] Sử dụng IP bridge: {bridge_info[1]}")
+                
+                # Thêm try-except để bắt lỗi khi cập nhật gateway
+                try:
+                    update_default_gw(target_host, bridge_info[1])
+                    host_map[target_host][storyboard.DEFAULT_GW] = True
+                    print(f"[DEBUG GW] Đã cập nhật thành công gateway cho host {target_host}")
+                    found_bridge = True
+                    break
+                except Exception as e:
+                    print(f"[DEBUG GW] Lỗi khi cập nhật gateway: {e}")
+                    raise Exception(f"Lỗi khi cập nhật gateway cho host {target_host}: {e}")
+    
+    if not found_bridge:
+        print(f"[DEBUG GW] Không tìm thấy bridge hoạt động cho subnet {subnet}")
+        raise Exception(f"Không tìm thấy bridge hoạt động cho subnet {subnet}")
+    
+    print(f"[DEBUG GW] Trạng thái DEFAULT_GW sau khi cập nhật: {host_map[target_host][storyboard.DEFAULT_GW]}")
 
 def map_services_to_ports(services, subnet=False):
     """Mapping list of services to list of corresponding ports

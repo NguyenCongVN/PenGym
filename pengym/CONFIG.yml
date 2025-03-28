@@ -3,9 +3,9 @@
 # Global configuration values in PenGym
 #########################################
 
-pengym_source: /home/ntcong/dev/PenGym
+pengym_source: /home/ntcong/dev/Pengym_dev/PenGym
 
-# host_mgmt_addr: 172.16.1.4
+host_mgmt_addr: 172.16.1.2
 # host_virbr_addr: 192.168.122.1
 # host_account: cyuser
 # guest_basevm_config_file: /home/cyuser/images/ubuntubase.xml
@@ -17,7 +17,7 @@ range_id: 44
 # Configuration of the MSF RPC service
 # Make sure to update the msfrpc_config section with the correct settings:
 msfrpc_config:
-  msfrpc_host: 44.1.0.10  # Your MSF RPC server address
+  msfrpc_host: 127.0.0.1  # Your MSF RPC server address
   port: 55553             # The correct port
   msfrpc_client_pwd: "cyuser"  # Your password
   ssl: true               # Change this to true to enable SSL
@@ -118,8 +118,8 @@ cyber_range:
       add_account:
         # Account, password and password file for the e_ssh action
         ssh: 
-          account: test
-          passwd: test1234
+          account: cyuser
+          passwd: cyuser
           pwd_file: e_ssh_pwd_file
 
       copy_content:

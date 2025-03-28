@@ -150,37 +150,29 @@ class PenGymNetwork(Network):
 
         return next_state, result
 
-    # # Override function in NASim
-    # def traffic_permitted(self, state, host_addr, service):
-    #     """Checks whether the subnet and host firewalls permits traffic to a
-    #     given host using this service, based on current set of compromised hosts on
-    #     network.
-        
-    #     Args:
-    #         state (State): the current state of environment
-    #         host_addr (tuple): host address
-    #         service (str): service name
-    #     """
-    #     for src_addr in self.address_space:
-    #         src_compromised = state.host_compromised(src_addr)
-    #         if not state.host_compromised(src_addr) and \
-    #            not self.subnet_public(src_addr[0]):
-    #             continue
-    #         if not self.subnet_traffic_permitted(
-    #                 src_addr[0], host_addr[0], service, src_compromised
-    #         ):
-    #             continue
-    #         if self.host_traffic_permitted(src_addr, host_addr, service):
-    #             return True
-    #     return False
-    
+    # Override function in NASim
     def traffic_permitted(self, state, host_addr, service):
-        """Checks whether traffic is permitted based on iptables rules
+        """Checks whether the subnet and host firewalls permits traffic to a
+        given host using this service, based on current set of compromised hosts on
+        network.
+        
+        Args:
+            state (State): the current state of environment
+            host_addr (tuple): host address
+            service (str): service name
         """
-        # Trong môi trường NAT với iptables, các quy tắc đã được cấu hình
-        # nên chúng ta chỉ cần kiểm tra liệu luồng lưu lượng có được cho phép 
-        # dựa trên mô hình scenario
-        return self.subnet_traffic_permitted(host_addr[0], self._target[0], service, True)
+        for src_addr in self.address_space:
+            src_compromised = state.host_compromised(src_addr)
+            if not state.host_compromised(src_addr) and \
+               not self.subnet_public(src_addr[0]):
+                continue
+            if not self.subnet_traffic_permitted(
+                    src_addr[0], host_addr[0], service, src_compromised
+            ):
+                continue
+            if self.host_traffic_permitted(src_addr, host_addr, service):
+                return True
+        return False
     
     # Revise for issue in NASim (since with current version of python, nasim is updated an can not modify)
     def subnet_traffic_permitted(self, src_subnet, dest_subnet, service, src_compromised=True):
@@ -207,34 +199,70 @@ class PenGymNetwork(Network):
             return False
         return service in self.firewall[(src_subnet, dest_subnet)]
     
-    def has_required_remote_permission(self, state, action):
+    def has_required_remote_permission(self, state, action, DEBUG=True):
         """Checks attacker has necessary permissions for remote action 
         
         Args:
             state (State): the current state of the network
             action (Action): the action to perform
+            DEBUG (bool): whether to print debug information
         """
-
+        
+        # Lưu tên hàm để sử dụng trong các thông báo debug
+        function_name = "has_required_remote_permission"
+        
+        # In thông tin debug về hành động đang được kiểm tra
+        if DEBUG:
+            print(f"[DEBUG - {function_name}] Kiểm tra quyền cho hành động: {action.name} trên mục tiêu: {action.target}")
+        
+        # Nếu subnet đích là public, cho phép hành động mà không cần kiểm tra thêm
         if self.subnet_public(action.target[0]):
+            if DEBUG:
+                print(f"[DEBUG - {function_name}] Subnet đích {action.target[0]} là public - được phép truy cập")
             return True
-
+        
         # NOTE: Add new check same host in exploit_remote
+        # Duyệt qua tất cả các địa chỉ trong mạng để tìm host có quyền thực hiện hành động
         for src_addr in self.address_space:
+            # Bỏ qua các host chưa bị xâm nhập
             if not state.host_compromised(src_addr):
+                if DEBUG:
+                    print(f"[DEBUG - {function_name}] Host {src_addr} chưa bị xâm nhập - bỏ qua")
                 continue
-            if action.is_scan() and \
-               not self.subnets_connected(src_addr[0], action.target[0]):
+                
+            # Nếu là hành động scan, kiểm tra xem các subnet có kết nối với nhau không
+            if action.is_scan() and not self.subnets_connected(src_addr[0], action.target[0]):
+                if DEBUG:
+                    print(f"[DEBUG - {function_name}] Hành động scan nhưng subnet {src_addr[0]} và {action.target[0]} không kết nối - bỏ qua")
                 continue
            
-            if action.is_exploit() and \
-               (not self.subnet_traffic_permitted(
+            # Nếu là hành động exploit, kiểm tra xem lưu lượng có được phép không và nguồn/đích không phải cùng một host
+            if action.is_exploit() and (not self.subnet_traffic_permitted(
                    src_addr[0], action.target[0], action.service)
                 or src_addr == action.target):
+                if DEBUG:
+                    if src_addr == action.target:
+                        reason = "nguồn và đích là cùng một host"
+                    else:
+                        reason = f"lưu lượng không được phép từ subnet {src_addr[0]} đến {action.target[0]} cho dịch vụ {action.service}"
+                    print(f"[DEBUG - {function_name}] Hành động exploit nhưng {reason} - bỏ qua")
                 continue
             
+            # FIX: Nếu là hành động trên máy, kiểm tra xem đã truy cập mục tiêu chưa
+            # if action.is_exploit_remote() and not state.host_has_access(src_addr, action.target):
+            #     if DEBUG:
+            #         print(f"[DEBUG - {function_name}] Hành động exploit remote nhưng chưa truy cập mục tiêu - bỏ qua")
+            #     continue
+            
+            # Kiểm tra nếu host có quyền truy cập cần thiết để thực hiện hành động
             if state.host_has_access(src_addr, action.req_access):
+                if DEBUG:
+                    print(f"[DEBUG - {function_name}] Host {src_addr} có quyền truy cập cần thiết {action.req_access} - được phép thực hiện")
                 return True
         
+        # Nếu không tìm thấy host nào có quyền cần thiết, từ chối hành động
+        if DEBUG:
+            print(f"[DEBUG - {function_name}] Không tìm thấy host nào có quyền cần thiết - từ chối hành động")
         return False
 
     def do_subnet_scan(self, subnet_address, nm, ports=False):
