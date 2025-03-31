@@ -3,6 +3,7 @@
 import pengym.utilities as utils
 import logging
 import time
+from logger import logger
 
 from nasim.envs.network import Network
 from nasim.envs.action import ActionResult
@@ -34,7 +35,7 @@ class PenGymNetwork(Network):
         next_state, obs = super().perform_action(state, action)
         end = time.time()
         # Catch actions that did not succeed in the superclass function
-        # PENGYM_ERROR is used to check if this error comes from PenGym or not; consequently we do not print a failure
+        # PENGYM_ERROR is used to check if this error comes from PenGym or not; consequently we do not logger.info a failure
         # that occured in the super function if the error has already been printed in a PenGym function
         if not obs.success and not utils.PENGYM_ERROR:
             utils.print_failure(action, obs, storyboard.TAG_NASIM_PENGYM, end-start)
@@ -126,7 +127,7 @@ class PenGymNetwork(Network):
                     # Print the result
                     result = ActionResult(True, value=discovery_reward, discovered=discovered_dict,
                                           newly_discovered=self.define_newly_discovered_hosts(discovered_list))
-                    print(f"  Host {action.target} Action '{action.name}' SUCCESS: discovered={result.discovered} newly_discovered={result.newly_discovered} Execution Time: {end-start:1.6f}{tag_pengym}")
+                    logger.info(f"  Host {action.target} Action '{action.name}' SUCCESS: discovered={result.discovered} newly_discovered={result.newly_discovered} Execution Time: {end-start:1.6f}{tag_pengym}")
                 else:
                     logging.warning(f"Result of do_subnet_scan(): {subnet_scan_result}")
                     result = ActionResult(False, undefined_error=True) # connection_error may be more appropriate
@@ -144,7 +145,7 @@ class PenGymNetwork(Network):
             next_state, result = super()._perform_subnet_scan(next_state, action)
             end = time.time()
             if result.success:
-                print(f"  Host {action.target} Action '{action.name}' SUCCESS: discovered={result.discovered} newly_discovered={result.newly_discovered} Execution Time: {end-start:1.6f}{tag_nasim}")
+                logger.info(f"  Host {action.target} Action '{action.name}' SUCCESS: discovered={result.discovered} newly_discovered={result.newly_discovered} Execution Time: {end-start:1.6f}{tag_nasim}")
             else:
                 utils.print_failure(action, result, storyboard.NASIM, end-start)
 
@@ -205,7 +206,7 @@ class PenGymNetwork(Network):
         Args:
             state (State): the current state of the network
             action (Action): the action to perform
-            DEBUG (bool): whether to print debug information
+            DEBUG (bool): whether to logger.info debug information
         """
         
         # Lưu tên hàm để sử dụng trong các thông báo debug
@@ -213,12 +214,12 @@ class PenGymNetwork(Network):
         
         # In thông tin debug về hành động đang được kiểm tra
         if DEBUG:
-            print(f"[DEBUG - {function_name}] Kiểm tra quyền cho hành động: {action.name} trên mục tiêu: {action.target}")
+            logger.debug(f"[DEBUG - {function_name}] Kiểm tra quyền cho hành động: {action.name} trên mục tiêu: {action.target}")
         
         # Nếu subnet đích là public, cho phép hành động mà không cần kiểm tra thêm
         if self.subnet_public(action.target[0]):
             if DEBUG:
-                print(f"[DEBUG - {function_name}] Subnet đích {action.target[0]} là public - được phép truy cập")
+                logger.debug(f"[DEBUG - {function_name}] Subnet đích {action.target[0]} là public - được phép truy cập")
             return True
         
         # NOTE: Add new check same host in exploit_remote
@@ -227,13 +228,13 @@ class PenGymNetwork(Network):
             # Bỏ qua các host chưa bị xâm nhập
             if not state.host_compromised(src_addr):
                 if DEBUG:
-                    print(f"[DEBUG - {function_name}] Host {src_addr} chưa bị xâm nhập - bỏ qua")
+                    logger.debug(f"[DEBUG - {function_name}] Host {src_addr} chưa bị xâm nhập - bỏ qua")
                 continue
                 
             # Nếu là hành động scan, kiểm tra xem các subnet có kết nối với nhau không
             if action.is_scan() and not self.subnets_connected(src_addr[0], action.target[0]):
                 if DEBUG:
-                    print(f"[DEBUG - {function_name}] Hành động scan nhưng subnet {src_addr[0]} và {action.target[0]} không kết nối - bỏ qua")
+                    logger.debug(f"[DEBUG - {function_name}] Hành động scan nhưng subnet {src_addr[0]} và {action.target[0]} không kết nối - bỏ qua")
                 continue
            
             # Nếu là hành động exploit, kiểm tra xem lưu lượng có được phép không và nguồn/đích không phải cùng một host
@@ -245,24 +246,24 @@ class PenGymNetwork(Network):
                         reason = "nguồn và đích là cùng một host"
                     else:
                         reason = f"lưu lượng không được phép từ subnet {src_addr[0]} đến {action.target[0]} cho dịch vụ {action.service}"
-                    print(f"[DEBUG - {function_name}] Hành động exploit nhưng {reason} - bỏ qua")
+                    logger.debug(f"[DEBUG - {function_name}] Hành động exploit nhưng {reason} - bỏ qua")
                 continue
             
             # FIX: Nếu là hành động trên máy, kiểm tra xem đã truy cập mục tiêu chưa
             # if action.is_exploit_remote() and not state.host_has_access(src_addr, action.target):
             #     if DEBUG:
-            #         print(f"[DEBUG - {function_name}] Hành động exploit remote nhưng chưa truy cập mục tiêu - bỏ qua")
+            #         logger.debug(f"[DEBUG - {function_name}] Hành động exploit remote nhưng chưa truy cập mục tiêu - bỏ qua")
             #     continue
             
             # Kiểm tra nếu host có quyền truy cập cần thiết để thực hiện hành động
             if state.host_has_access(src_addr, action.req_access):
                 if DEBUG:
-                    print(f"[DEBUG - {function_name}] Host {src_addr} có quyền truy cập cần thiết {action.req_access} - được phép thực hiện")
+                    logger.debug(f"[DEBUG - {function_name}] Host {src_addr} có quyền truy cập cần thiết {action.req_access} - được phép thực hiện")
                 return True
         
         # Nếu không tìm thấy host nào có quyền cần thiết, từ chối hành động
         if DEBUG:
-            print(f"[DEBUG - {function_name}] Không tìm thấy host nào có quyền cần thiết - từ chối hành động")
+            logger.debug(f"[DEBUG - {function_name}] Không tìm thấy host nào có quyền cần thiết - từ chối hành động")
         return False
 
     def do_subnet_scan(self, subnet_address, nm, ports=False):

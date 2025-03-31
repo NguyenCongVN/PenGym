@@ -5,11 +5,12 @@
 import time
 import pengym
 import numpy
-import logging
+import logger
 import sys
 import getopt
 import pengym.utilities as utils
 from pengym.storyboard import Storyboard
+
 
 import torch
 import torch.nn as nn
@@ -20,6 +21,10 @@ import numpy as np
 from collections import deque
 
 storyboard = Storyboard()
+
+from logger import logger
+# from ql_agent import run_ql_agent  # Thêm dòng này
+from ql_agent_original import TabularQLearningAgent
 
 #############################################################################
 # Constants
@@ -62,6 +67,7 @@ ACTION_TARGETS = {
 AGENT_TYPE_RANDOM = "random"
 AGENT_TYPE_DETERMINISTIC = "deterministic"
 AGENT_TYPE_DQN = "dqn"
+AGENT_TYPE_QL = "qlearning"  # Thêm dòng này
 DEFAULT_AGENT_TYPE = AGENT_TYPE_DQN
 
 # Other constants
@@ -98,7 +104,7 @@ def run_random_agent(env):
 
         # Increment step count and execute action
         step_count = step_count + 1
-        print(f"- Step {step_count}: {env.action_space.get_action(action)}")
+        logger.info(f"- Step {step_count}: {env.action_space.get_action(action)}")
         observation, reward, done, truncated, info = env.step(action)
         if RENDER_OBS_STATE:
             env.render() # render most recent observation
@@ -106,7 +112,7 @@ def run_random_agent(env):
 
         # Conditional exit (for debugging purposes)
         if step_count >= MAX_STEPS:
-            logging.warning(f"Abort execution after {step_count} steps")
+            logger.warning(f"Abort execution after {step_count} steps")
             break
 
     return done, truncated, step_count
@@ -121,32 +127,32 @@ def run_deterministic_agent(env, deterministic_path):
     step_count = 0 # Count the number of execution steps
     total_reward = 0 # Tổng reward nhận được trong quá trình thực thi
     
-    logging.info("\n===== BẮT ĐẦU CHẠY DETERMINISTIC AGENT =====")
-    logging.debug("Tổng số bước trong deterministic path: %s", len(deterministic_path))
-    logging.debug("Chi tiết đường dẫn: %s", deterministic_path)
+    logger.info("\n===== BẮT ĐẦU CHẠY DETERMINISTIC AGENT =====")
+    logger.debug("Tổng số bước trong deterministic path: %s", len(deterministic_path))
+    logger.debug("Chi tiết đường dẫn: %s", deterministic_path)
 
     # Loop while the experiment is not finished (pentesting goal not reached)
     # and not truncated (aborted because of exceeding maximum number of steps)
     while not done and not truncated:
         # Exit if there are no more steps in the deterministic path
         if step_count >= len(deterministic_path):
-            logging.debug("Đã hết các bước trong deterministic path")
+            logger.debug("Đã hết các bước trong deterministic path")
             break
         
         # Retrieve the next action to be executed
         action_tuple = deterministic_path[step_count]
         action = select_action(env.action_space, ACTION_NAMES[action_tuple[1]], ACTION_TARGETS[action_tuple[0]])
         
-        logging.debug("\n----- THỰC THI BƯỚC %s/%s -----", step_count + 1, len(deterministic_path))
-        logging.debug("Action tuple: %s", action_tuple)
-        logging.debug("Tên hành động: %s", ACTION_NAMES[action_tuple[1]])
-        logging.debug("Mục tiêu: %s", ACTION_TARGETS[action_tuple[0]])
-        logging.debug("Action đã chuyển đổi: %s", action)
+        logger.debug("\n----- THỰC THI BƯỚC %s/%s -----", step_count + 1, len(deterministic_path))
+        logger.debug("Action tuple: %s", action_tuple)
+        logger.debug("Tên hành động: %s", ACTION_NAMES[action_tuple[1]])
+        logger.debug("Mục tiêu: %s", ACTION_TARGETS[action_tuple[0]])
+        logger.debug("Action đã chuyển đổi: %s", action)
 
         # Increment step count and execute action
         step_count = step_count + 1
         
-        logging.info("- Step %s: %s", step_count, action)
+        logger.info("- Step %s: %s", step_count, action)
         
         # Bắt đầu đo thời gian thực thi
         import time
@@ -161,44 +167,44 @@ def run_deterministic_agent(env, deterministic_path):
         # Cập nhật tổng reward
         total_reward += reward
         
-        logging.debug("Thời gian thực thi: %.4f giây", execution_time)
-        logging.debug("Reward: %s (Tổng: %s)", reward, total_reward)
-        logging.debug("Done: %s, Truncated: %s", done, truncated)
-        logging.debug("Info: %s", info)
+        logger.debug("Thời gian thực thi: %.4f giây", execution_time)
+        logger.debug("Reward: %s (Tổng: %s)", reward, total_reward)
+        logger.debug("Done: %s, Truncated: %s", done, truncated)
+        logger.debug("Info: %s", info)
         
         # Hiển thị một phần của observation để debug
         if hasattr(observation, "shape"):  # Nếu observation là array hoặc tensor
-            logging.debug("Observation shape: %s", observation.shape)
+            logger.debug("Observation shape: %s", observation.shape)
             # Hiển thị observation nếu là tensor
             if len(observation.shape) > 1:
-                logging.debug("Observation: %s", observation[:5])
+                logger.debug("Observation: %s", observation[:5])
             else:
-                logging.debug("Observation: %s", observation)
+                logger.debug("Observation: %s", observation)
         else:  # Nếu observation là dict hoặc cấu trúc khác
-            logging.debug("Observation type: %s", type(observation))
+            logger.debug("Observation type: %s", type(observation))
             
         if RENDER_OBS_STATE:
-            logging.debug("Rendering observation and state...")
+            logger.debug("Rendering observation and state...")
             env.render() # render most recent observation
             env.render_state() # render most recent state
 
         # Conditional exit (for debugging purposes)
         if step_count >= MAX_STEPS:
-            logging.warning("CẢNH BÁO: Vượt quá số bước tối đa (%s)", MAX_STEPS)
-            logging.warning("Abort execution after %s steps", step_count)
+            logger.warning("CẢNH BÁO: Vượt quá số bước tối đa (%s)", MAX_STEPS)
+            logger.warning("Abort execution after %s steps", step_count)
             break
 
     # In thông tin tổng kết sau khi hoàn thành
-    logging.info("\n===== KẾT QUẢ THỰC THI =====")
-    logging.info("Tổng số bước đã thực hiện: %s/%s", step_count, len(deterministic_path))
-    logging.info("Tổng reward: %s", total_reward)
-    logging.info("Hoàn thành mục tiêu: %s", done)
-    logging.info("Bị truncate: %s", truncated)
+    logger.info("\n===== KẾT QUẢ THỰC THI =====")
+    logger.info("Tổng số bước đã thực hiện: %s/%s", step_count, len(deterministic_path))
+    logger.info("Tổng reward: %s", total_reward)
+    logger.info("Hoàn thành mục tiêu: %s", done)
+    logger.info("Bị truncate: %s", truncated)
     
     # Xác định lý do kết thúc
     reason = "Đạt mục tiêu" if done else "Hết bước" if step_count >= len(deterministic_path) else "Vượt quá số bước tối đa" if step_count >= MAX_STEPS else "Bị truncate"
-    logging.info("Lý do kết thúc: %s", reason)
-    logging.info("================================\n")
+    logger.info("Lý do kết thúc: %s", reason)
+    logger.info("================================\n")
 
     return done, truncated, step_count
 
@@ -227,16 +233,16 @@ def create_pengym_custom_environment(scenario_path):
 
 # Thêm thông tin DQN vào usage
 def usage():
-    print("\nOVERVIEW: Run demo of the PenGym training framework for pentesting agents\n")
-    print("USAGE: python3 run.py [options] <CONFIG_FILE> \n")
-    print("OPTIONS:")
-    print("-h, --help                     Display this help message and exit")
-    print("-a, --agent_type <AGENT_TYPE>  Agent type (random/deterministic/dqn)")
-    print("-d, --disable_pengym           Disable PenGym execution in cyber range")
-    print("-n, --nasim_simulation         Enable NASim simulation execution")
-    print("--train                        Train the DQN agent (for dqn agent type)")
-    print("--load <MODEL_PATH>            Load pre-trained DQN model")
-    print("--save <MODEL_PATH>            Save trained DQN model")
+    logger.info("\nOVERVIEW: Run demo of the PenGym training framework for pentesting agents\n")
+    logger.info("USAGE: python3 run.py [options] <CONFIG_FILE> \n")
+    logger.info("OPTIONS:")
+    logger.info("-h, --help                     Display this help message and exit")
+    logger.info("-a, --agent_type <AGENT_TYPE>  Agent type (random/deterministic/dqn)")
+    logger.info("-d, --disable_pengym           Disable PenGym execution in cyber range")
+    logger.info("-n, --nasim_simulation         Enable NASim simulation execution")
+    logger.info("--train                        Train the DQN agent (for dqn agent type)")
+    logger.info("--load <MODEL_PATH>            Load pre-trained DQN model")
+    logger.info("--save <MODEL_PATH>            Save trained DQN model")
 
 
 # Định nghĩa mô hình mạng nơ-ron cho DQN
@@ -431,14 +437,14 @@ class DQNAgentPenGym:
         else:
             self.device = device
             
-        logging.debug("DQN Agent sẽ chạy trên: %s", self.device)
+        logger.info("DQN Agent sẽ chạy trên: %s", self.device)
             
         # Lấy kích thước không gian quan sát và hành động
         self.obs_dim = env.observation_space.shape[0]
         self.n_actions = env.action_space.n
         
-        logging.debug("Kích thước không gian quan sát: %s", self.obs_dim)
-        logging.debug("Số lượng hành động: %s", self.n_actions)
+        logger.debug("Kích thước không gian quan sát: %s", self.obs_dim)
+        logger.debug("Số lượng hành động: %s", self.n_actions)
         
         # Khởi tạo mạng nơ-ron
         self.policy_net = DQNNetwork(self.obs_dim, hidden_dims, self.n_actions).to(self.device)
@@ -525,7 +531,7 @@ class DQNAgentPenGym:
         if self.steps % self.target_update_freq == 0:
             self.target_net.load_state_dict(self.policy_net.state_dict())
     
-    def train(self, num_episodes, max_steps_per_episode=1000):
+    def train(self, num_episodes, max_steps_per_episode=500):
         """Huấn luyện DQN agent
         
         Parameters:
@@ -541,8 +547,15 @@ class DQNAgentPenGym:
             Danh sách phần thưởng cho mỗi tập
         """
         episode_rewards = []
+        total_steps = 0  # Biến đếm tổng số bước đã thực hiện
         
-        logging.debug("Bắt đầu huấn luyện DQN agent trong %s tập...", num_episodes)
+        logger.info("Bắt đầu huấn luyện DQN agent trong %s tập...", num_episodes)
+        logger.info("Thông số cấu hình: epsilon_start=%.3f, epsilon_end=%.3f, batch_size=%d, gamma=%.3f",
+                    self.epsilon, self.epsilon_end, self.batch_size, self.gamma)
+        
+        # Ghi nhận thời điểm bắt đầu để theo dõi thời gian huấn luyện
+        import time
+        start_time = time.time()
         
         for episode in range(num_episodes):
             # Reset môi trường
@@ -550,41 +563,93 @@ class DQNAgentPenGym:
             total_reward = 0
             done = False
             truncated = False
+            episode_start_time = time.time()  # Thời điểm bắt đầu episode
+            
+            logger.info(f'***** Episode {episode + 1}/{num_episodes} *****')
+            
+            logger.info("Episode %d/%d bắt đầu, epsilon hiện tại: %.4f", 
+                        episode + 1, num_episodes, self.epsilon)
             
             for step in range(max_steps_per_episode):
+                
+                logger.info('---------------------------------')
+                
                 # Chọn hành động
                 action = self.select_action(state)
                 
+                # Log thông tin về hành động được chọn ở mức độ info
+                # if step % 10 == 0 or step < 5:  # Giới hạn log để tránh quá nhiều output
+                action_obj = self.env.action_space.get_action(action)
+                logger.info("Episode %d - Step %d: Thực hiện %s", 
+                        episode + 1, step + 1, action_obj)
+                
                 # Thực hiện hành động
-                next_state, reward, done, truncated, _ = self.env.step(action)
+                next_state, reward, done, truncated, info = self.env.step(action)
+                
+                # Debug thông tin về kết quả hành động
+                logger.info("  Hành động %d -> Reward: %.2f, Done: %s, Truncated: %s", 
+                            action, reward, done, truncated)
                 
                 # Lưu chuyển trạng thái vào bộ nhớ
                 self.memory.add(state, action, reward, next_state, done)
                 
                 # Cập nhật mô hình
-                self.update_model()
+                prev_loss = None  # Biến để lưu giá trị loss trước đây
+                if len(self.memory) >= self.batch_size:
+                    prev_loss = self.update_model()  # Giả sử update_model trả về loss
+                    if prev_loss is not None:
+                        logger.info("  Update model - Loss: %.5f", prev_loss)
                 
                 # Cập nhật trạng thái và phần thưởng
                 state = next_state
                 total_reward += reward
                 self.steps += 1
+                total_steps += 1
                 
                 # Giảm epsilon theo thời gian
+                old_epsilon = self.epsilon  # Lưu giá trị epsilon cũ để so sánh
                 self.epsilon = max(self.epsilon_end, self.epsilon * self.epsilon_decay)
+                
+                # In thông tin về epsilon nếu thay đổi đáng kể
+                if abs(old_epsilon - self.epsilon) > 0.01:
+                    logger.info("  Epsilon giảm từ %.4f xuống %.4f", old_epsilon, self.epsilon)
                 
                 # Kiểm tra điều kiện kết thúc
                 if done or truncated:
+                    # Nếu kết thúc, ghi lại lý do
+                    reason = "hoàn thành mục tiêu" if done else "bị cắt ngắn"
+                    logger.info("  Episode kết thúc sau %d bước vì %s", step + 1, reason)
                     break
             
+            # Thêm dòng này để in ra reward của mỗi episode
+            logger.info("Episode %d/%d - Reward: %.2f", episode + 1, num_episodes, total_reward)
+            
+            # Tính thời gian thực thi episode
+            episode_time = time.time() - episode_start_time
             episode_rewards.append(total_reward)
             
-            # In thông tin về tập hiện tại
+            # Log thông tin chi tiết sau mỗi episode
+            logger.info("Episode %d/%d hoàn thành: Reward=%.2f, Bước=%d, Thời gian=%.2f giây", 
+                        episode + 1, num_episodes, total_reward, step + 1, episode_time)
+            
+            # In thông tin về tập hiện tại - sử dụng mức info
             if (episode + 1) % 10 == 0:
                 avg_reward = sum(episode_rewards[-10:]) / 10
-                logging.info("Tập %s/%s, Reward: %.2f, Avg Reward (10 tập): %.2f, Epsilon: %.4f", 
-                             episode + 1, num_episodes, total_reward, avg_reward, self.epsilon)
+                elapsed_time = time.time() - start_time
+                logger.info("Tập %s/%s, Reward: %.2f, Avg Reward (10 tập): %.2f, Epsilon: %.4f, Thời gian: %.1f phút", 
+                        episode + 1, num_episodes, total_reward, avg_reward, self.epsilon, elapsed_time/60)
         
-        logging.debug("Đã hoàn thành huấn luyện!")
+        # Thống kê tổng quan về quá trình huấn luyện
+        training_time = time.time() - start_time
+        logger.debug("===== Tổng kết huấn luyện =====")
+        logger.debug("Tổng số episode: %d", num_episodes)
+        logger.debug("Tổng số bước thực hiện: %d", total_steps)
+        logger.debug("Reward trung bình: %.2f", sum(episode_rewards)/len(episode_rewards))
+        logger.debug("Reward cao nhất: %.2f", max(episode_rewards))
+        logger.debug("Thời gian huấn luyện: %.1f phút", training_time/60)
+        logger.debug("Epsilon cuối: %.4f", self.epsilon)
+        
+        logger.info("Đã hoàn thành huấn luyện!")
         return episode_rewards
     
     def evaluate(self, num_episodes=5):
@@ -603,7 +668,7 @@ class DQNAgentPenGym:
         episode_rewards = []
         successes = 0
         
-        logging.debug("Đánh giá DQN agent trong %s tập...", num_episodes)
+        logger.debug("Đánh giá DQN agent trong %s tập...", num_episodes)
         
         for episode in range(num_episodes):
             state, _ = self.env.reset()
@@ -617,7 +682,7 @@ class DQNAgentPenGym:
                 action = self.select_action(state, eval_mode=True)
                 action_obj = self.env.action_space.get_action(action)
                 
-                logging.info("- Step %s: %s", step_count + 1, action_obj)
+                logger.info("- Step %s: %s", step_count + 1, action_obj)
                 
                 # Thực hiện hành động
                 next_state, reward, done, truncated, _ = self.env.step(action)
@@ -632,17 +697,17 @@ class DQNAgentPenGym:
                     successes += 1
                 
                 if step_count >= MAX_STEPS:
-                    logging.warning("CẢNH BÁO: Vượt quá số bước tối đa (%s)", MAX_STEPS)
+                    logger.warning("CẢNH BÁO: Vượt quá số bước tối đa (%s)", MAX_STEPS)
                     break
             
             episode_rewards.append(total_reward)
-            logging.info("Tập %s/%s, Reward: %.2f, Steps: %s, Done: %s", 
+            logger.info("Tập %s/%s, Reward: %.2f, Steps: %s, Done: %s", 
                         episode + 1, num_episodes, total_reward, step_count, done)
         
         avg_reward = sum(episode_rewards) / num_episodes
         success_rate = successes / num_episodes
         
-        logging.debug("Kết quả đánh giá: Reward TB: %.2f, Tỷ lệ thành công: %.2f", 
+        logger.debug("Kết quả đánh giá: Reward TB: %.2f, Tỷ lệ thành công: %.2f", 
                      avg_reward, success_rate)
         
         return avg_reward, success_rate
@@ -663,7 +728,7 @@ class DQNAgentPenGym:
             'epsilon': self.epsilon,                     # Giá trị epsilon hiện tại
             'steps': self.steps                          # Số bước đã thực hiện
         }, path)
-        logging.debug("Đã lưu mô hình vào %s", path)
+        logger.debug("Đã lưu mô hình vào %s", path)
     
     def load(self, path):
         """Tải mô hình DQN đã lưu
@@ -675,41 +740,40 @@ class DQNAgentPenGym:
         """
         try:
             # Tải mô hình từ file và ánh xạ tới thiết bị phù hợp
-            logging.debug("Bắt đầu tải mô hình từ %s", path)
+            logger.debug("Bắt đầu tải mô hình từ %s", path)
             checkpoint = torch.load(path, map_location=self.device)
             
             # Khôi phục trạng thái các thành phần từ checkpoint
             # Trọng số của mạng chính sách (policy network)
             self.policy_net.load_state_dict(checkpoint['policy_net'])
-            logging.debug("Đã tải trọng số của policy network")
+            logger.debug("Đã tải trọng số của policy network")
             
             # Trọng số của mạng mục tiêu (target network)
             self.target_net.load_state_dict(checkpoint['target_net'])
-            logging.debug("Đã tải trọng số của target network")
+            logger.debug("Đã tải trọng số của target network")
             
             # Trạng thái của bộ tối ưu hóa (optimizer)
             self.optimizer.load_state_dict(checkpoint['optimizer'])
-            logging.debug("Đã tải trạng thái của optimizer")
+            logger.debug("Đã tải trạng thái của optimizer")
             
             # Giá trị epsilon cho chính sách khám phá
             self.epsilon = checkpoint['epsilon']
             # Số bước huấn luyện đã thực hiện
             self.steps = checkpoint['steps']
             
-            logging.info("Đã tải mô hình thành công từ %s (epsilon=%.4f, steps=%d)", 
+            logger.info("Đã tải mô hình thành công từ %s (epsilon=%.4f, steps=%d)", 
                         path, self.epsilon, self.steps)
         except FileNotFoundError:
             # Ghi log lỗi khi không tìm thấy file
-            logging.error("Không tìm thấy file mô hình: %s", path)
+            logger.error("Không tìm thấy file mô hình: %s", path)
         except KeyError as e:
             # Ghi log lỗi khi thiếu thành phần trong checkpoint
-            logging.error("Checkpoint không hợp lệ - thiếu thành phần: %s", e)
+            logger.error("Checkpoint không hợp lệ - thiếu thành phần: %s", e)
         except Exception as e:
             # Ghi log lỗi chung nếu có vấn đề khác khi tải mô hình
-            logging.error("Lỗi khi tải mô hình: %s", e)
-            logging.exception("Chi tiết lỗi:")  # Ghi ra stack trace chi tiết
+            logger.error("Lỗi khi tải mô hình: %s", e)
+            logger.exception("Chi tiết lỗi:")  # Ghi ra stack trace chi tiết
 
-# Thêm hàm chạy DQN agent
 # Thêm hàm chạy DQN agent
 def run_dqn_agent(env, train=False, load_path=None, save_path=None, 
                  num_train_episodes=100, num_eval_episodes=5):
@@ -744,7 +808,7 @@ def run_dqn_agent(env, train=False, load_path=None, save_path=None,
     
     # Huấn luyện nếu yêu cầu
     if train:
-        logging.info("Huấn luyện DQN agent trong %s tập...", num_train_episodes)
+        logger.info("Huấn luyện DQN agent trong %s tập...", num_train_episodes)
         agent.train(num_train_episodes)
         
         # Lưu mô hình nếu có đường dẫn
@@ -752,7 +816,7 @@ def run_dqn_agent(env, train=False, load_path=None, save_path=None,
             agent.save(save_path)
     
     # Đánh giá agent
-    logging.info("Thực thi pentesting bằng DQN agent...")
+    logger.info("Thực thi pentesting bằng DQN agent...")
     avg_reward, success_rate = agent.evaluate(num_eval_episodes)
     
     # Kiểm tra kết quả
@@ -761,7 +825,7 @@ def run_dqn_agent(env, train=False, load_path=None, save_path=None,
     step_count = MAX_STEPS if not done else MAX_STEPS // 2  # Giả lập số bước
     
     # Ghi log kết quả đánh giá chi tiết
-    logging.debug("Kết quả DQN agent: success_rate=%.2f, avg_reward=%.2f, steps=%d", 
+    logger.debug("Kết quả DQN agent: success_rate=%.2f, avg_reward=%.2f, steps=%d", 
                  success_rate, avg_reward, step_count)
     
     return done, truncated, step_count
@@ -771,14 +835,9 @@ def run_dqn_agent(env, train=False, load_path=None, save_path=None,
 #############################################################################
 def main(args):
 
-    # Configure logging
-    logging.basicConfig(level=logging.INFO,
-                        format='* %(levelname)s: %(filename)s: %(message)s')
-
-
-    print("#########################################################################")
-    print("PenGym: Pentesting Training Framework for Reinforcement Learning Agents")
-    print("#########################################################################")
+    logger.info("#########################################################################")
+    logger.info("PenGym: Pentesting Training Framework for Reinforcement Learning Agents")
+    logger.info("#########################################################################")
 
     # Default argument values
     agent_type = DEFAULT_AGENT_TYPE
@@ -790,11 +849,12 @@ def main(args):
         opts, trailing_args = getopt.getopt(args, "ha:dn",
                                             ["help", "agent_type=", "disable_pengym", "nasim_simulation"])
     except getopt.GetoptError as err:
-        logging.error(f"Command-line argument error: {str(err)}")
+        logger.error(f"Command-line argument error: {str(err)}")
         usage()
         sys.exit(1)
         
     train_dqn = True
+    train_ql = True
     load_model_path = None
     save_model_path = None
 
@@ -810,6 +870,7 @@ def main(args):
             utils.ENABLE_NASIM = True
         elif opt in ("--train"):
             train_dqn = True
+            train_ql = True
         elif opt in ("--load"):
             load_model_path = arg
         elif opt in ("--save"):
@@ -823,46 +884,48 @@ def main(args):
     try:
         config_path = trailing_args[0]
     except Exception as e:
-        logging.error(f"Configuration file is not specified")
+        logger.error(f"Configuration file is not specified")
         usage()
         sys.exit(2)
 
-    # Print parameters
-    print(f"* Execution parameters:")
-    print(f"  - Agent type: {agent_type}")
-    print(f"  - PenGym cyber range execution enabled: {utils.ENABLE_PENGYM}")
-    print(f"  - NASim simulation execution enabled: {utils.ENABLE_NASIM}")
+    # logger.info parameters
+    logger.info(f"* Execution parameters:")
+    logger.info(f"  - Agent type: {agent_type}")
+    logger.info(f"  - PenGym cyber range execution enabled: {utils.ENABLE_PENGYM}")
+    logger.info(f"  - NASim simulation execution enabled: {utils.ENABLE_NASIM}")
 
     # Check execution parameters
     if not (utils.ENABLE_PENGYM or utils.ENABLE_NASIM):
-        logging.error("Either PenGym or NASim must be enabled")
+        logger.error("Either PenGym or NASim must be enabled")
         usage()
         sys.exit(2)
 
-    print(f"* Read configuration from '{config_path}'...")
+    logger.info(f"* Read configuration from '{config_path}'...")
     utils.init_config_info(config_path)
 
     # Create an experiment environment using scenario path
     scenario_path = utils.replace_file_path(utils.config_info, storyboard.SCENARIO_FILE)
-    print(f"* Create environment using custom scenario from '{scenario_path}'...")
+    logger.info(f"* Create environment using custom scenario from '{scenario_path}'...")
     env = create_pengym_custom_environment(scenario_path)
 
     if utils.ENABLE_PENGYM:
-        print(f"* Read configuration from '{config_path}'...")
+        logger.info(f"* Read configuration from '{config_path}'...")
         utils.init_config_info(config_path)
         
-        print("* Initialize MSF RPC client...")
+        logger.info("* Initialize MSF RPC client...")
         try:
             utils.init_msfrpc_client()
+            logger.info("* Clean up MSF RPC client...")
+            utils.cleanup_msfrpc_client()
         except Exception as e:
-            logging.error(f"Failed to initialize MSF RPC client: {e}")
-            print("* Cannot continue without Metasploit RPC connection.")
-            print("* Please ensure Metasploit is running and RPC settings are correct in CONFIG.yml.")
-            print("* Check if msfrpcd is running with: ps aux | grep msfrpcd")
-            print("* Start it with: msfrpcd -P yourpassword -S -a 127.0.0.1")
+            logger.error(f"Failed to initialize MSF RPC client: {e}")
+            logger.info("* Cannot continue without Metasploit RPC connection.")
+            logger.info("* Please ensure Metasploit is running and RPC settings are correct in CONFIG.yml.")
+            logger.info("* Check if msfrpcd is running with: ps aux | grep msfrpcd")
+            logger.info("* Start it with: msfrpcd -P yourpassword -S -a 127.0.0.1")
             sys.exit(2)
         
-        print("* Initialize Nmap Scanner...")
+        logger.info("* Initialize Nmap Scanner...")
         utils.init_nmap_scanner()
         
         utils.init_host_map()
@@ -875,7 +938,7 @@ def main(args):
 
     # Run experiment using a random agent
     if agent_type == AGENT_TYPE_RANDOM:
-        print("* Perform pentesting using a RANDOM agent...")
+        logger.info("* Perform pentesting using a RANDOM agent...")
         done, truncated, step_count = run_random_agent(env)
 
     # Run experiment using a deterministic agent
@@ -899,35 +962,47 @@ def main(args):
         
         deterministic_path = [(HOST1_0, PROCESS_SCAN)]
 
-        print("* Execute pentesting using a DETERMINISTIC agent...")
+        logger.info("* Execute pentesting using a DETERMINISTIC agent...")
         done, truncated, step_count = run_deterministic_agent(env, deterministic_path)
     elif agent_type == AGENT_TYPE_DQN:
-        print("* Execute pentesting using a DQN agent...")
+        logger.info("* Execute pentesting using a DQN agent...")
         done, truncated, step_count = run_dqn_agent(env, 
                                                 train=train_dqn,
                                                 load_path=load_model_path,
                                                 save_path=save_model_path)
+    elif agent_type == AGENT_TYPE_QL:
+        logger.info("* Execute pentesting using a Q-LEARNING agent...")
+        # done, truncated, step_count = run_ql_agent(env, 
+        #                                     train=train_ql,
+        #                                     load_path=load_model_path,
+        #                                     save_path=save_model_path)
+        
+        ql_agent = TabularQLearningAgent(
+            env, verbose=True
+        )
+        ql_agent.train()
+        ql_agent.run_eval_episode(render=True)
     else:
-        logging.error(f"Unrecognized agent type: '{agent_type}'")
+        logger.error(f"Unrecognized agent type: '{agent_type}'")
         usage()
         sys.exit(1)
 
-    # Print execution status
+    # logger.info execution status
     if done:
         # All the goals in the scenario file were reached
-        print(f"* NORMAL execution: {step_count} steps")
+        logger.info(f"* NORMAL execution: {step_count} steps")
     elif truncated:
         # Execution was truncated before reaching all the goals (for random agents, etc.)
-        print(f"* TRUNCATED execution: {step_count} steps")
+        logger.info(f"* TRUNCATED execution: {step_count} steps")
     else:
         # Execution finished before reaching all the goals (for deterministic agents)
-        print(f"* INCOMPLETE execution: {step_count} steps")
+        logger.info(f"* INCOMPLETE execution: {step_count} steps")
 
     if utils.ENABLE_PENGYM:
-        print("* Clean up MSF RPC client...")
+        logger.info("* Clean up MSF RPC client...")
         utils.cleanup_msfrpc_client()
 
-        print("* Restore the to intial state of the firewalls for all hosts...")
+        logger.info("* Restore the to intial state of the firewalls for all hosts...")
         utils.save_restore_firewall_rules_all_hosts(flag=storyboard.RESTORE)
 
 #############################################################################
@@ -936,4 +1011,4 @@ if __name__ == "__main__":
     start = time.time()
     main(sys.argv[1:])
     end = time.time()
-    #print(f"Execution Time: {end-start:1.6f}s")
+    #logger.info(f"Execution Time: {end-start:1.6f}s")

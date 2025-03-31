@@ -9,6 +9,8 @@ import nmap
 import subprocess
 import yaml
 
+from logger import logger
+
 # Declare global variables
 global config_info
 global scenario
@@ -152,14 +154,63 @@ def cleanup_msfrpc_client():
     global msfrpc_client
 
     if msfrpc_client:
-        while (len(msfrpc_client.jobs.list) != 0 or len(msfrpc_client.sessions.list) !=0):
-            for job_id, _ in msfrpc_client.jobs.list.items():
-                msfrpc_client.jobs.stop(job_id)
-            for session_key, session_details in msfrpc_client.sessions.list.items():
-                try:
-                    msfrpc_client.sessions.session(session_key).stop()
-                except Exception as e:
-                    print(f"* WARRNING: Failed to stop session {session_key}: {e}")
+        logger.info("[CLEANUP] Bắt đầu dọn dẹp Metasploit client")
+        
+        # Lấy số lượng jobs và sessions ban đầu để theo dõi
+        initial_job_count = len(msfrpc_client.jobs.list)
+        initial_session_count = len(msfrpc_client.sessions.list)
+        logger.info(f"[CLEANUP] Số lượng jobs hiện có: {initial_job_count}, sessions: {initial_session_count}")
+        
+        # Đếm số vòng lặp để phòng trường hợp lặp vô hạn
+        cleanup_iterations = 0
+        max_iterations = 10  # Giới hạn số vòng lặp 
+        
+        while (len(msfrpc_client.jobs.list) != 0 or len(msfrpc_client.sessions.list) != 0):
+            cleanup_iterations += 1
+            logger.debug(f"[CLEANUP] Vòng lặp dọn dẹp thứ {cleanup_iterations}")
+            
+            # Dọn dẹp jobs
+            if len(msfrpc_client.jobs.list) > 0:
+                logger.info(f"[CLEANUP] Đang dừng {len(msfrpc_client.jobs.list)} jobs...")
+                for job_id, job_info in msfrpc_client.jobs.list.items():
+                    try:
+                        logger.debug(f"[CLEANUP] Đang dừng job {job_id}: {job_info}")
+                        msfrpc_client.jobs.stop(job_id)
+                        logger.debug(f"[CLEANUP] Đã dừng job {job_id}")
+                    except Exception as e:
+                        logger.warning(f"[CLEANUP] Lỗi khi dừng job {job_id}: {e}")
+            
+            # Dọn dẹp sessions
+            if len(msfrpc_client.sessions.list) > 0:
+                logger.info(f"[CLEANUP] Đang dừng {len(msfrpc_client.sessions.list)} sessions...")
+                for session_key, session_details in msfrpc_client.sessions.list.items():
+                    try:
+                        logger.debug(f"[CLEANUP] Đang dừng session {session_key}: {session_details}")
+                        msfrpc_client.sessions.session(session_key).stop()
+                        logger.debug(f"[CLEANUP] Đã dừng session {session_key}")
+                    except Exception as e:
+                        logger.warning(f"[CLEANUP] Lỗi khi dừng session {session_key}: {e}")
+            
+            # Kiểm tra nếu đã quá số vòng lặp tối đa
+            if cleanup_iterations >= max_iterations:
+                logger.warning(f"[CLEANUP] Đã đạt đến giới hạn {max_iterations} vòng lặp. Có thể còn jobs/sessions không thể dừng.")
+                break
+            
+            # Tạm dừng để tránh sử dụng quá nhiều CPU
+            import time
+            time.sleep(0.5)
+        
+        # Báo cáo kết quả
+        jobs_remaining = len(msfrpc_client.jobs.list)
+        sessions_remaining = len(msfrpc_client.sessions.list)
+        logger.info(f"[CLEANUP] Hoàn thành dọn dẹp sau {cleanup_iterations} vòng lặp.")
+        logger.info(f"[CLEANUP] Jobs đã dừng: {initial_job_count - jobs_remaining}/{initial_job_count}")
+        logger.info(f"[CLEANUP] Sessions đã dừng: {initial_session_count - sessions_remaining}/{initial_session_count}")
+        
+        if jobs_remaining > 0 or sessions_remaining > 0:
+            logger.warning(f"[CLEANUP] Vẫn còn {jobs_remaining} jobs và {sessions_remaining} sessions chưa được dọn dẹp.")
+    else:
+        logger.debug("[CLEANUP] Không có Metasploit client nào cần dọn dẹp")
 
 def init_nmap_scanner():
     """Initialize the nmap scanner for scanning actions
@@ -483,22 +534,22 @@ def init_service_port_map():
     service_port_map = config_info[storyboard.SERVICE_PORT]
     
     # Debug: In ra thông tin về service_port_map
-    print(f"[DEBUG] Đã khởi tạo service_port_map")
-    print(f"[DEBUG] Số lượng dịch vụ trong map: {len(service_port_map)}")
+    logger.debug(f"[DEBUG] Đã khởi tạo service_port_map")
+    logger.debug(f"[DEBUG] Số lượng dịch vụ trong map: {len(service_port_map)}")
     
     # Debug: In chi tiết các dịch vụ và cổng tương ứng
     print("[DEBUG] Chi tiết mapping dịch vụ-cổng:")
     for service, port in service_port_map.items():
-        print(f"[DEBUG]  - {service}: {port}")
+        logger.debug(f"[DEBUG]  - {service}: {port}")
     
     # Debug: Kiểm tra một số dịch vụ quan trọng
     important_services = ["ssh", "http", "https", "ftp", "smb"]
     print("[DEBUG] Kiểm tra các dịch vụ quan trọng:")
     for service in important_services:
         if service.upper() in service_port_map:
-            print(f"[DEBUG]  - {service.upper()}: {service_port_map[service.upper()]}")
+            logger.debug(f"[DEBUG]  - {service.upper()}: {service_port_map[service.upper()]}")
         else:
-            print(f"[DEBUG]  - {service.upper()}: Không có trong map")
+            logger.debug(f"[DEBUG]  - {service.upper()}: Không có trong map")
 
 def map_result_list_to_dict(resultValues, scenarioValues, bool=False):
     """Transform the result values from PenGym format (list) to NASim format (dictionary of all values in scenario with True/False)
@@ -595,7 +646,7 @@ def print_failure(action, observation, context, exec_time):
         context (str): pengym/nasim
         exec_time (double): Execution time
     """
-    print(f"  Host {action.target} Action '{action.name}' FAILURE:"
+    logger.error(f"  Host {action.target} Action '{action.name}' FAILURE:"
                   f"{' connection_error=TRUE' if observation.connection_error else ''}"
                   f"{' permission_error=TRUE' if observation.permission_error else ''}"
                   f"{' undefined_error=TRUE'  if observation.undefined_error  else ''}"
@@ -792,40 +843,40 @@ def update_default_gw(target_host, bridge_ip):
         bridge_ip (str): ip address of bridge that is active
     """
     # In thông tin đầu vào
-    print(f"[DEBUG GW] Bắt đầu cập nhật default gateway cho host {target_host}")
-    print(f"[DEBUG GW] Sử dụng bridge IP: {bridge_ip}")
+    logger.debug(f"[DEBUG GW] Bắt đầu cập nhật default gateway cho host {target_host}")
+    logger.debug(f"[DEBUG GW] Sử dụng bridge IP: {bridge_ip}")
 
     script_path = 'pengym/envs/scripts/del_add_default_gw.exp'
     vm_name = host_map[target_host][storyboard.KVM_DOMAIN]
     
     # In thông tin các biến được sử dụng
-    print(f"[DEBUG GW] Đường dẫn script: {script_path}")
-    print(f"[DEBUG GW] Tên máy ảo: {vm_name}")
+    logger.debug(f"[DEBUG GW] Đường dẫn script: {script_path}")
+    logger.debug(f"[DEBUG GW] Tên máy ảo: {vm_name}")
     
     command = f'expect {script_path} {vm_name} {bridge_ip}'
-    print(f"[DEBUG GW] Lệnh thực thi: {command}")
+    logger.debug(f"[DEBUG GW] Lệnh thực thi: {command}")
 
     # Kiểm tra xem máy ảo có đang chạy không
     try:
         check_vm_cmd = f"virsh domstate {vm_name}"
         result = subprocess.run(check_vm_cmd, shell=True, capture_output=True, text=True)
-        print(f"[DEBUG GW] Trạng thái máy ảo: {result.stdout.strip()}")
+        logger.debug(f"[DEBUG GW] Trạng thái máy ảo: {result.stdout.strip()}")
         
         if "running" not in result.stdout:
-            print(f"[DEBUG GW] CẢNH BÁO: Máy ảo {vm_name} không ở trạng thái running")
+            logger.debug(f"[DEBUG GW] CẢNH BÁO: Máy ảo {vm_name} không ở trạng thái running")
     except Exception as e:
-        print(f"[DEBUG GW] Lỗi khi kiểm tra trạng thái máy ảo: {e}")
+        logger.debug(f"[DEBUG GW] Lỗi khi kiểm tra trạng thái máy ảo: {e}")
 
     # Execute script
     try:
-        print(f"[DEBUG GW] Bắt đầu thực thi script...")
+        logger.debug(f"[DEBUG GW] Bắt đầu thực thi script...")
         execute_script(command)
-        print(f"[DEBUG GW] Đã thực thi script thành công")
+        logger.debug(f"[DEBUG GW] Đã thực thi script thành công")
     except Exception as e:
-        print(f"[DEBUG GW] Lỗi khi thực thi script: {e}")
+        logger.debug(f"[DEBUG GW] Lỗi khi thực thi script: {e}")
         raise  # Truyền lỗi lên cấp cao hơn
 
-    print(f"[DEBUG GW] Hoàn thành cập nhật default gateway cho host {target_host}")
+    logger.debug(f"[DEBUG GW] Hoàn thành cập nhật default gateway cho host {target_host}")
     
 def check_and_update_available_gw(target_host):
     """Check if the current default gw of the currennt host is active or not; 
@@ -835,51 +886,51 @@ def check_and_update_available_gw(target_host):
     Args:
         target_host (tuple): host need to update gw
     """
-    print(f"[DEBUG GW] Bắt đầu kiểm tra và cập nhật gateway cho host {target_host}")
+    logger.debug(f"[DEBUG GW] Bắt đầu kiểm tra và cập nhật gateway cho host {target_host}")
     subnet = target_host[0]
-    print(f"[DEBUG GW] Subnet ID của host: {subnet}")
+    logger.debug(f"[DEBUG GW] Subnet ID của host: {subnet}")
     
     # Lấy thông tin host hiện tại để debug
     vm_name = host_map[target_host][storyboard.KVM_DOMAIN]
-    print(f"[DEBUG GW] Máy ảo: {vm_name}")
-    print(f"[DEBUG GW] Trạng thái DEFAULT_GW hiện tại: {host_map[target_host][storyboard.DEFAULT_GW]}")
+    logger.debug(f"[DEBUG GW] Máy ảo: {vm_name}")
+    logger.debug(f"[DEBUG GW] Trạng thái DEFAULT_GW hiện tại: {host_map[target_host][storyboard.DEFAULT_GW]}")
     
     # Hiển thị thông tin bridge_map để debug
-    print(f"[DEBUG GW] Danh sách bridge_map: {bridge_map}")
+    logger.debug(f"[DEBUG GW] Danh sách bridge_map: {bridge_map}")
     
     # Get list of connected bridge to this host
     found_bridge = False
     for link, bridge_info in bridge_map.items():
-        print(f"[DEBUG GW] Kiểm tra link: {link}, bridge_info: {bridge_info}")
+        logger.debug(f"[DEBUG GW] Kiểm tra link: {link}, bridge_info: {bridge_info}")
         if str(subnet) in link:
-            print(f"[DEBUG GW] Tìm thấy link phù hợp với subnet {subnet}: {link}")
+            logger.debug(f"[DEBUG GW] Tìm thấy link phù hợp với subnet {subnet}: {link}")
             bridge_name = bridge_info[0]
-            print(f"[DEBUG GW] Tên bridge: {bridge_name}")
+            logger.debug(f"[DEBUG GW] Tên bridge: {bridge_name}")
             
             # Kiểm tra trạng thái bridge
             bridge_status = check_bridge_status(bridge_name)
-            print(f"[DEBUG GW] Trạng thái bridge {bridge_name}: {'UP' if bridge_status else 'DOWN'}")
+            logger.debug(f"[DEBUG GW] Trạng thái bridge {bridge_name}: {'UP' if bridge_status else 'DOWN'}")
             
             if bridge_status:
-                print(f"[DEBUG GW] Bridge {bridge_name} đang hoạt động, cập nhật gateway cho host {target_host}")
-                print(f"[DEBUG GW] Sử dụng IP bridge: {bridge_info[1]}")
+                logger.debug(f"[DEBUG GW] Bridge {bridge_name} đang hoạt động, cập nhật gateway cho host {target_host}")
+                logger.debug(f"[DEBUG GW] Sử dụng IP bridge: {bridge_info[1]}")
                 
                 # Thêm try-except để bắt lỗi khi cập nhật gateway
                 try:
                     update_default_gw(target_host, bridge_info[1])
                     host_map[target_host][storyboard.DEFAULT_GW] = True
-                    print(f"[DEBUG GW] Đã cập nhật thành công gateway cho host {target_host}")
+                    logger.debug(f"[DEBUG GW] Đã cập nhật thành công gateway cho host {target_host}")
                     found_bridge = True
                     break
                 except Exception as e:
-                    print(f"[DEBUG GW] Lỗi khi cập nhật gateway: {e}")
+                    logger.debug(f"[DEBUG GW] Lỗi khi cập nhật gateway: {e}")
                     raise Exception(f"Lỗi khi cập nhật gateway cho host {target_host}: {e}")
     
     if not found_bridge:
-        print(f"[DEBUG GW] Không tìm thấy bridge hoạt động cho subnet {subnet}")
+        logger.debug(f"[DEBUG GW] Không tìm thấy bridge hoạt động cho subnet {subnet}")
         raise Exception(f"Không tìm thấy bridge hoạt động cho subnet {subnet}")
     
-    print(f"[DEBUG GW] Trạng thái DEFAULT_GW sau khi cập nhật: {host_map[target_host][storyboard.DEFAULT_GW]}")
+    logger.debug(f"[DEBUG GW] Trạng thái DEFAULT_GW sau khi cập nhật: {host_map[target_host][storyboard.DEFAULT_GW]}")
 
 def map_services_to_ports(services, subnet=False):
     """Mapping list of services to list of corresponding ports
