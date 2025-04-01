@@ -346,10 +346,17 @@ class PenGymHostVector(HostVector):
                 else:
                     logger.debug(f"[DEBUG EXPLOIT] NASim exploit thất bại")
                     utils.print_failure(action, result, storyboard.NASIM, end-start)
+                    
+                    return next_state, result
         
             logger.debug(f"[DEBUG EXPLOIT] Kết thúc xử lý exploit, trả về next_state và result")
             return next_state, result
 
+        # Use NASim code logic to ensure that the following actions are only executed on host
+        # if the correct access level has already been obtained
+        if not (self.compromised and action.req_access <= self.access):
+            result = ActionResult(False, 0, permission_error=True)
+            return next_state, result
 
         ###########################################################################################
         # Perform ProcessScan

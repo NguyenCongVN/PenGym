@@ -249,12 +249,6 @@ class PenGymNetwork(Network):
                     logger.debug(f"[DEBUG - {function_name}] Hành động exploit nhưng {reason} - bỏ qua")
                 continue
             
-            # FIX: Nếu là hành động trên máy, kiểm tra xem đã truy cập mục tiêu chưa
-            # if action.is_exploit_remote() and not state.host_has_access(src_addr, action.target):
-            #     if DEBUG:
-            #         logger.debug(f"[DEBUG - {function_name}] Hành động exploit remote nhưng chưa truy cập mục tiêu - bỏ qua")
-            #     continue
-            
             # Kiểm tra nếu host có quyền truy cập cần thiết để thực hiện hành động
             if state.host_has_access(src_addr, action.req_access):
                 if DEBUG:
