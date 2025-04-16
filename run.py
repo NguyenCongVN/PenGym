@@ -5,7 +5,6 @@
 import time
 import pengym
 import numpy
-import logger
 import sys
 import getopt
 import pengym.utilities as utils

@@ -1,3 +1,4 @@
+# type: ignore
 """An example Tabular, epsilon greedy Q-Learning Agent.
 
 This agent does not use an Experience replay (see the 'ql_replay_agent.py')

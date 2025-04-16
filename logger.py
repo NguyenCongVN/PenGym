@@ -21,11 +21,11 @@ info_log_filename = f"./logs/app_info_{timestamp}.log"  # File mới cho mức I
 
 # Handler cho file debug (lưu tất cả các log từ DEBUG trở lên)
 debug_file_handler = logging.FileHandler(debug_log_filename, encoding='utf-8')
-debug_file_handler.setLevel(logging.ERROR)
+debug_file_handler.setLevel(logging.DEBUG)
 
 # Handler cho file info (chỉ lưu từ INFO trở lên)
 info_file_handler = logging.FileHandler(info_log_filename, encoding='utf-8')
-info_file_handler.setLevel(logging.ERROR)  # Chỉ ghi log từ mức INFO trở lên
+info_file_handler.setLevel(logging.INFO)  # Chỉ ghi log từ mức INFO trở lên
 
 # Tạo formatters
 console_formatter = logging.Formatter('%(levelname)s: %(message)s')
@@ -42,7 +42,7 @@ logger.addHandler(debug_file_handler)
 logger.addHandler(info_file_handler)  # Thêm handler mới vào logger
 
 # Ví dụ sử dụng
-def main():
+def main() -> None:
     logger.info("Ứng dụng bắt đầu")
     logger.debug("Thông tin debug chi tiết")  # Chỉ xuất hiện trong file debug
     try:

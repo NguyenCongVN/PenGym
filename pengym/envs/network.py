@@ -1,13 +1,14 @@
 
 # Import libraries
+from nasim.envs.state import State
 import pengym.utilities as utils
 import logging
 import time
 from logger import logger
 
-from nasim.envs.network import Network
-from nasim.envs.action import ActionResult
-from pengym.storyboard import Storyboard
+from nasim.envs.network import Network # type: ignore
+from nasim.envs.action import Action, ActionResult # type: ignore
+from pengym.storyboard import Storyboard # type: ignore
 
 storyboard = Storyboard()
 
@@ -18,7 +19,7 @@ class PenGymNetwork(Network):
         Network: Network Class of NASim
     """
 
-    def perform_action(self, state, action):
+    def perform_action(self, state: State, action: Action, DEBUG=True):
         """Perform the given action against the network.
 
         Args:
@@ -32,7 +33,7 @@ class PenGymNetwork(Network):
         utils.current_state = state # Get the current state of the network
 
         start = time.time()
-        next_state, obs = super().perform_action(state, action)
+        next_state, obs = super().perform_action(state, action, DEBUG)
         end = time.time()
         # Catch actions that did not succeed in the superclass function
         # PENGYM_ERROR is used to check if this error comes from PenGym or not; consequently we do not logger.info a failure
@@ -42,7 +43,7 @@ class PenGymNetwork(Network):
 
         return next_state, obs
 
-    def _perform_subnet_scan(self, next_state, action):
+    def _perform_subnet_scan(self, next_state: State, action: Action):
         """Perform subnet scan on this network. This function overrides _perform_subnet_scan() in NASim Network.
 
         Args:
@@ -77,6 +78,9 @@ class PenGymNetwork(Network):
 
             else:
 
+                if utils.scenario is None:
+                    raise ValueError("Scenario is not defined")
+                
                 # Map host address to IP address
                 subnet_ips = utils.map_host_address_to_IP_address(utils.host_map, action.target, subnet=True)
 
@@ -92,11 +96,11 @@ class PenGymNetwork(Network):
                     utils.host_is_discovered.append(action.target)
 
                 # Do subnet scan
-                subnet_scan_result = utils.host_map[action.target][storyboard.SUBNET]
+                subnet_scan_result = utils.host_map[action.target]['subnet']
 
                 if (subnet_scan_result is None):
                     subnet_scan_result = self.do_subnet_scan(subnet_ips, utils.nmap_scanner, ports)
-                    utils.host_map[action.target][storyboard.SUBNET] = subnet_scan_result
+                    utils.host_map[action.target]['subnet'] = subnet_scan_result
 
                 # Map the discovered IP address to host address
                 discovered_list = utils.map_IP_adress_to_host_address(utils.host_map, subnet_scan_result)

@@ -1,14 +1,15 @@
 
 # Import libraries
 import time
+from typing import Tuple, cast
 from logger import logger
 import numpy as np
 
-from nasim.envs.host_vector import HostVector
-from nasim.envs.action import ActionResult
-from nasim.envs.utils import AccessLevel
-from pengym.storyboard import Storyboard
-from pymetasploit3.msfrpc import MeterpreterSession, ShellSession
+from nasim.envs.host_vector import HostVector # type: ignore
+from nasim.envs.action import Action, ActionResult, Exploit # type: ignore
+from nasim.envs.utils import AccessLevel # type: ignore
+from pengym.storyboard import Storyboard # type: ignore
+from pymetasploit3.msfrpc import MeterpreterSession, ShellSession # type: ignore
 
 import pengym.utilities as utils
 
@@ -22,7 +23,7 @@ class PenGymHostVector(HostVector):
     """
 
     # Perform action (overrides super class function)
-    def perform_action(self, action):
+    def perform_action(self, action: Action, DEBUG: bool = True) -> Tuple["PenGymHostVector", ActionResult]:
         """Perform given action on this host. This function overrides the perform_action() function in NASim HostVector.
 
         Args:
@@ -32,6 +33,9 @@ class PenGymHostVector(HostVector):
             PenGymHostVector: The resulting state of host after action
             ActionObservation: The result of the action
         """
+
+        if utils.scenario is None:
+            raise RuntimeError("Scenario is not set. Please set the scenario before performing actions.")
 
         # Get the subnet firewall configuration in scenario
         firewall = utils.scenario.firewall
@@ -187,9 +191,11 @@ class PenGymHostVector(HostVector):
         # Perform Exploit
         if action.is_exploit():
         
+            exploitAction = cast(Exploit, action)
+        
             # PenGym execution
             if utils.ENABLE_PENGYM:
-                logger.debug(f"[DEBUG EXPLOIT] Bắt đầu thực hiện action '{action.name}' trên host {self.address} với service={action.service}")
+                logger.debug(f"[DEBUG EXPLOIT] Bắt đầu thực hiện exploitAction '{exploitAction.name}' trên host {self.address} với service={exploitAction.service}")
                 
                 start = time.time()
         
@@ -208,22 +214,22 @@ class PenGymHostVector(HostVector):
                     logger.debug(f"[DEBUG EXPLOIT] Kiểm tra và cập nhật gateway cho host {self.address}")
                     utils.check_and_update_available_gw(self.address)
         
-                # Get the state of exploit action
+                # Get the state of exploit exploitAction
                 service_exploit_state = utils.host_map[self.address][storyboard.SERVICE_EXPLOIT_STATE]
                 logger.debug(f"[DEBUG EXPLOIT] Trạng thái SERVICE_EXPLOIT_STATE: {service_exploit_state}")
         
                 # Hiển thị trạng thái exploit hiện tại
-                if action.service in utils.host_map[self.address][storyboard.EXPLOIT_ACCESS]:
-                    current_access = utils.host_map[self.address][storyboard.EXPLOIT_ACCESS][action.service]
-                    logger.debug(f"[DEBUG EXPLOIT] Trạng thái EXPLOIT_ACCESS hiện tại cho {action.service}: {current_access}")
+                if exploitAction.service in utils.host_map[self.address][storyboard.EXPLOIT_ACCESS]:
+                    current_access = utils.host_map[self.address][storyboard.EXPLOIT_ACCESS][exploitAction.service]
+                    logger.debug(f"[DEBUG EXPLOIT] Trạng thái EXPLOIT_ACCESS hiện tại cho {exploitAction.service}: {current_access}")
                 else:
-                    logger.debug(f"[DEBUG EXPLOIT] Chưa có thông tin EXPLOIT_ACCESS cho {action.service}")
+                    logger.debug(f"[DEBUG EXPLOIT] Chưa có thông tin EXPLOIT_ACCESS cho {exploitAction.service}")
         
                 # Execute the exploit if exploit status is None
-                # Or the exploit action need to be re-executed on this host
+                # Or the exploit exploitAction need to be re-executed on this host
                 logger.debug(f"[DEBUG EXPLOIT] Kiểm tra điều kiện thực hiện exploit...")
-                need_exploit = (action.service not in utils.host_map[self.address][storyboard.EXPLOIT_ACCESS] or 
-                              (service_exploit_state and utils.host_map[self.address][storyboard.EXPLOIT_ACCESS][action.service] is None))
+                need_exploit = (exploitAction.service not in utils.host_map[self.address][storyboard.EXPLOIT_ACCESS] or 
+                              (service_exploit_state and utils.host_map[self.address][storyboard.EXPLOIT_ACCESS][exploitAction.service] is None))
                 logger.debug(f"[DEBUG EXPLOIT] Cần thực hiện exploit: {need_exploit}")
                 
                 if need_exploit:
@@ -232,16 +238,16 @@ class PenGymHostVector(HostVector):
                         logger.debug(f"[DEBUG EXPLOIT] Thử thực hiện exploit trên IP: {host_ip}")
         
                         # Check if do e_samba with valid condition -> open firewall as temporary solution
-                        if action.service == utils.storyboard.SAMBA:
+                        if exploitAction.service == utils.storyboard.SAMBA:
                             # Check the permission of samba service in target host
-                            filtered_services = self.filter_permission_services(action, firewall, address_space)
+                            filtered_services = self.filter_permission_services(exploitAction, firewall, address_space)
                             logger.debug(f"[DEBUG EXPLOIT] Dịch vụ được phép (filtered_services): {filtered_services}")
                             if filtered_services[utils.storyboard.SAMBA] == 1.0:
                                 logger.debug(f"[DEBUG EXPLOIT] Mở firewall cho SAMBA trên host {self.address}")
                                 utils.open_firewall_rule_e_samba(self.address)
         
-                        logger.debug(f"[DEBUG EXPLOIT] Gọi hàm do_exploit({host_ip}, {host_ip_list}, {action.service})")
-                        exploit_result, access, exploit_exec_time = self.do_exploit(host_ip, host_ip_list, action.service)
+                        logger.debug(f"[DEBUG EXPLOIT] Gọi hàm do_exploit({host_ip}, {host_ip_list}, {exploitAction.service})")
+                        exploit_result, access, exploit_exec_time = self.do_exploit(host_ip, host_ip_list, exploitAction.service)
                         logger.debug(f"[DEBUG EXPLOIT] Kết quả do_exploit: result={exploit_result}, access={access}, time={exploit_exec_time}")
         
                         if exploit_result:
@@ -250,18 +256,18 @@ class PenGymHostVector(HostVector):
                             if (utils.host_map[self.address][storyboard.SHELL] is None):
                                 utils.host_map[self.address][storyboard.SHELL] = exploit_result
                                 logger.debug(f"[DEBUG EXPLOIT] Đã lưu shell mới cho host {self.address}")
-                            utils.host_map[self.address][storyboard.EXPLOIT_ACCESS][action.service] = access
-                            logger.debug(f"[DEBUG EXPLOIT] Đã lưu quyền truy cập cho {action.service}: {access}")
+                            utils.host_map[self.address][storyboard.EXPLOIT_ACCESS][exploitAction.service] = access
+                            logger.debug(f"[DEBUG EXPLOIT] Đã lưu quyền truy cập cho {exploitAction.service}: {access}")
                             break
                         else:
                             logger.debug(f"[DEBUG EXPLOIT] Exploit thất bại cho IP {host_ip}")
-                            utils.host_map[self.address][storyboard.EXPLOIT_ACCESS][action.service] = None
+                            utils.host_map[self.address][storyboard.EXPLOIT_ACCESS][exploitAction.service] = None
         
                     logger.debug(f"[DEBUG EXPLOIT] Đặt SERVICE_EXPLOIT_STATE = False sau khi kết thúc vòng lặp")
                     utils.host_map[self.address][storyboard.SERVICE_EXPLOIT_STATE] = False
                 else:
                     logger.debug(f"[DEBUG EXPLOIT] Sử dụng kết quả exploit đã lưu trước đó")
-                    access = utils.host_map[self.address][storyboard.EXPLOIT_ACCESS][action.service]
+                    access = utils.host_map[self.address][storyboard.EXPLOIT_ACCESS][exploitAction.service]
                     if access:
                         logger.debug(f"[DEBUG EXPLOIT] Exploit đã thành công trước đó với quyền: {access}")
                         exploit_result = True
@@ -309,10 +315,10 @@ class PenGymHostVector(HostVector):
                     logger.debug(f"[DEBUG EXPLOIT] Đặt next_state.compromised = True")
                     
                     if not self.access == AccessLevel.ROOT:
-                        logger.debug(f"[DEBUG EXPLOIT] Host chưa có quyền ROOT, đặt next_state.access = {action.access}")
+                        logger.debug(f"[DEBUG EXPLOIT] Host chưa có quyền ROOT, đặt next_state.access = {exploitAction.access}")
                         # Ensure that a machine is not rewarded twice and access level does not decrease
-                        next_state.access = action.access
-                        if action.access == AccessLevel.ROOT:
+                        next_state.access = exploitAction.access
+                        if exploitAction.access == AccessLevel.ROOT:
                             logger.debug(f"[DEBUG EXPLOIT] Đạt được quyền ROOT, đặt value = {self.value}")
                             value = self.value
         
@@ -325,27 +331,27 @@ class PenGymHostVector(HostVector):
                     #NOTE: In training, for compatibility to NASim, change host_services to self.services and host_os to self.os in ActionResult(...)
                     result = ActionResult(True, value=value, services=host_services, os=host_os, access=access)
                     logger.debug(f"[DEBUG EXPLOIT] Tạo ActionResult thành công với access={result.access}")
-                    logger.info(f"  Host {self.address} Action '{action.name}' SUCCESS: access={result.access} services={result.services if result.services else None } os={result.os if result.os else None} Execution Time: {exploit_exec_time:1.6f}{tag_pengym}")
+                    logger.info(f"  Host {self.address} Action '{exploitAction.name}' SUCCESS: access={result.access} services={result.services if result.services else None } os={result.os if result.os else None} Execution Time: {exploit_exec_time:1.6f}{tag_pengym}")
                 else:
                     logger.debug(f"[DEBUG EXPLOIT] Xử lý khi exploit thất bại")
                     logger.warning(f"Result of do_exploit(): exploit_result={exploit_result} access={access}")
                     result = ActionResult(False, undefined_error=True) # connection_error may be more appropriate
                     utils.PENGYM_ERROR = True
                     logger.debug(f"[DEBUG EXPLOIT] Đặt PENGYM_ERROR = True")
-                    utils.print_failure(action, result, storyboard.PENGYM, exploit_exec_time)
+                    utils.print_failure(exploitAction, result, storyboard.PENGYM, exploit_exec_time)
         
             # NASim execution (NOTE: next_state IS modified)
             if utils.ENABLE_NASIM:
                 logger.debug(f"[DEBUG EXPLOIT] Thực hiện exploit trên NASim")
                 start = time.time()
-                next_state, result = super().perform_action(action)
+                next_state, result = super().perform_action(exploitAction)
                 end = time.time()
                 if result.success:
                     logger.debug(f"[DEBUG EXPLOIT] NASim exploit thành công: access={AccessLevel(result.access)}")
-                    logger.info(f"  Host {self.address} Action '{action.name}' SUCCESS: access={AccessLevel(result.access)} services={result.services} os={result.os} Execution Time: {end-start:1.6f}{tag_nasim}")
+                    logger.info(f"  Host {self.address} Action '{exploitAction.name}' SUCCESS: access={AccessLevel(result.access)} services={result.services} os={result.os} Execution Time: {end-start:1.6f}{tag_nasim}")
                 else:
                     logger.debug(f"[DEBUG EXPLOIT] NASim exploit thất bại")
-                    utils.print_failure(action, result, storyboard.NASIM, end-start)
+                    utils.print_failure(exploitAction, result, storyboard.NASIM, end-start)
                     
                     return next_state, result
         
@@ -354,7 +360,7 @@ class PenGymHostVector(HostVector):
 
         # Use NASim code logic to ensure that the following actions are only executed on host
         # if the correct access level has already been obtained
-        if not (self.compromised and action.req_access <= self.access):
+        if not (self.compromised and exploitAction.req_access <= self.access):
             result = ActionResult(False, 0, permission_error=True)
             return next_state, result
 

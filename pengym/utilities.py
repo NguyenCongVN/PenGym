@@ -1,9 +1,11 @@
 # Import libraries
+from nasim.envs.state import State # type: ignore
+from nasim.scenarios.scenario import Scenario # type: ignore
 import numpy as np
 import psutil
-from pymetasploit3.msfrpc import MsfRpcClient
+from pymetasploit3.msfrpc import MsfRpcClient  # type: ignore
 from pengym.storyboard import Storyboard
-
+from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 import sys
 import nmap
 import subprocess
@@ -11,10 +13,35 @@ import yaml
 
 from logger import logger
 
+# Định nghĩa chi tiết về kiểu dữ liệu của các giá trị trong host_map
+class HostMapDict(TypedDict, total=True):
+    # Định nghĩa kiểu dữ liệu cho mỗi trường trong host_map
+    host_ip: List[str]                # Danh sách địa chỉ IP của host (ví dụ: ["192.168.100.10"])
+    subnet_ip: str                    # Địa chỉ subnet dạng CIDR (ví dụ: "192.168.100.0/24")
+    kvm_domain: str                   # Tên domain trong KVM (ví dụ: "subnet1-host0")
+    bridge_up: bool                   # Trạng thái bridge (True/False)
+    shell: Optional[Any]       # Đối tượng shell từ Metasploit (hoặc None nếu chưa có shell)
+    os: Optional[Dict[str, bool]]     # Thông tin OS được phát hiện (hoặc None nếu chưa scan)
+    services: Optional[Dict[str, bool]]  # Thông tin dịch vụ được phát hiện (hoặc None nếu chưa scan)
+    processes: Optional[Dict[str, bool]]  # Thông tin tiến trình được phát hiện (hoặc None nếu chưa scan)
+    subnet: Optional[int]             # ID của subnet mà host thuộc về (hoặc None nếu chưa xác định)
+    pe_shell: Dict[str, Any]   # Từ điển lưu các shell đã thực hiện privilege escalation
+    exploit_access: Dict[str, int]    # Từ điển lưu các giá trị truy cập của exploit
+    access: float                     # Mức độ truy cập (0.0 = không có quyền, các giá trị khác tương ứng với AccessLevel)
+    default_gw: Optional[bool]        # Trạng thái default gateway (hoặc None nếu chưa xác định)
+    service_scan_state: bool          # Trạng thái quét dịch vụ (True = có thể quét)
+    os_scan_state: bool               # Trạng thái quét OS (True = có thể quét)
+    service_exploit_state: bool       # Trạng thái khai thác dịch vụ (True = có thể khai thác)
+
+# Định nghĩa kiểu dữ liệu tổng thể cho host_map
+HostMapType = Dict[Tuple[int, int], HostMapDict]
+
 # Declare global variables
 global config_info
 global scenario
+scenario: Optional[Scenario] = None
 global host_map
+host_map: HostMapType = {}
 global bridge_map
 global service_port_map
 global host_is_discovered
@@ -29,13 +56,13 @@ global PENGYM_ERROR
 storyboard = Storyboard()
 
 # Declare discovered host list
-host_is_discovered = list()
+host_is_discovered : List[Tuple[int, int]] = list()
 
 # Declare Metasploit and Nmap objects
 msfrpc_client = None
 nmap_scanner = None
-service_port_map = None
-current_state = None
+service_port_map: Optional[Dict[str, int]] = None
+current_state: Optional[State] = None
 
 # Default values regarding default PenGym/NASim execution
 ENABLE_PENGYM = True
@@ -509,6 +536,9 @@ def init_bridge_setup():
     except Exception as e:
         print(f"* WARNING: Failed to create bridge map: {e}", file=sys.stderr)
 
+    if scenario is None:
+        raise ValueError("Scenario is not initialized. Please initialize the scenario before calling init_bridge_setup.")
+
     conntected_subnet = list()
     internet = scenario.topology[0]
 
@@ -532,6 +562,9 @@ def init_service_port_map():
     
     # Gán giá trị từ cấu hình cho biến toàn cục
     service_port_map = config_info[storyboard.SERVICE_PORT]
+    
+    if service_port_map is None:
+        raise ValueError("Service port map is not initialized. Please initialize the service port map before calling init_service_port_map.")
     
     # Debug: In ra thông tin về service_port_map
     logger.debug(f"[DEBUG] Đã khởi tạo service_port_map")
@@ -598,7 +631,7 @@ def map_dict_values_to_list(dictValues):
 
     return value_list
 
-def map_host_address_to_IP_address(host_map, host, subnet = False):
+def map_host_address_to_IP_address(host_map: HostMapType, host: Tuple[int, int], subnet = False) -> Union[str, List[str]]:
     """Mapping host key address of NASim host to a list of IP addresses of corresponding PenGym host
     A list of subnet IP addresses of the PenGym host is returned if the subnet flag is on
 
@@ -772,7 +805,7 @@ def save_restore_firewall_rules (script_path, vm_name, flag):
     # Execute script
     execute_script(command)
 
-def save_restore_firewall_rules_all_hosts (flag):
+def save_restore_firewall_rules_all_hosts(flag):
     """Save/Restore firewall rule of all hosts
 
     Args:
@@ -780,6 +813,9 @@ def save_restore_firewall_rules_all_hosts (flag):
         network_id (id): the index of cyberrange
         flag (str): save or restore option
     """
+
+    if scenario is None:
+        raise ValueError("Scenario is not initialized. Please initialize the scenario before calling save_restore_firewall_rules_all_hosts.")
 
     script_path = 'pengym/envs/scripts/save_restore_firewall_rule.exp'
     
@@ -809,6 +845,9 @@ def add_firewall_rules_all_hosts (subnet_id):
     Args:
         subnet_id (int): subnet index
     """
+
+    if scenario is None:
+        raise ValueError("Scenario is not initialized. Please initialize the scenario before calling add_firewall_rules_all_hosts.")
 
     script_path = 'pengym/envs/scripts/add_firewall_rule.exp'
     
@@ -932,16 +971,20 @@ def check_and_update_available_gw(target_host):
     
     logger.debug(f"[DEBUG GW] Trạng thái DEFAULT_GW sau khi cập nhật: {host_map[target_host][storyboard.DEFAULT_GW]}")
 
-def map_services_to_ports(services, subnet=False):
+def map_services_to_ports(services: Dict[str, bool], subnet=False):
     """Mapping list of services to list of corresponding ports
     Args:
-        services (list): list of services
+        services (Dict[str, bool]): list of services
         subnet (bool, optional): Subnet flag
         True if want to return list of subnet IP addresses. Defaults to False
 
     Returns:
         port_list (list): list of corresponding ports
     """
+    
+    if service_port_map is None:
+        raise Exception("Service port map is not initialized. Please initialize the service port map before calling map_services_to_ports.")
+    
     port_list = list()
 
     for service in services:

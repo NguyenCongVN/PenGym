@@ -1,4 +1,5 @@
 
+# type: ignore
 # Import library
 import sys
 import os

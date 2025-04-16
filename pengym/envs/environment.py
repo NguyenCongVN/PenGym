@@ -1,6 +1,6 @@
 
 # Import libraries
-from nasim.envs import NASimEnv
+from nasim.envs import NASimEnv # type: ignore
 from .network import PenGymNetwork
 from .state import PenGymState
 
